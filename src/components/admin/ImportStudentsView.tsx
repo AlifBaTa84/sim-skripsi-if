@@ -333,7 +333,6 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
                     <th className="p-3 min-w-[200px] uppercase tracking-wider text-[11px]">Mahasiswa &amp; NIM</th>
                     <th className="p-3 min-w-[260px] uppercase tracking-wider text-[11px]">Judul Penelitian</th>
                     <th className="p-3 min-w-[180px] uppercase tracking-wider text-[11px]">Dosen Pembimbing</th>
-                    <th className="p-3 min-w-[180px] uppercase tracking-wider text-[11px]">Dosen Reviewer</th>
                     <th className="p-3 text-center w-28 uppercase tracking-wider text-[11px]">Status</th>
                   </tr>
                 </thead>
@@ -369,18 +368,6 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
                           <div className="font-semibold text-slate-900">
                             {advisorLec ? advisorLec.name : row.dosenPembimbing}
                           </div>
-                          <span className="text-[10px] text-slate-500">
-                            (Menjadi P2 saat Sidang)
-                          </span>
-                        </td>
-
-                        <td className="p-3">
-                          <span className="text-emerald-700 font-semibold italic text-[11px]">
-                            Dipilih di Papan Jadwal
-                          </span>
-                          <span className="text-[10px] text-slate-400 block mt-0.5">
-                            (Menjadi P1 saat Sidang Lulus)
-                          </span>
                         </td>
 
                         <td className="p-3 text-center">

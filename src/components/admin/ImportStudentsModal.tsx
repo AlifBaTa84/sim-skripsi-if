@@ -337,7 +337,6 @@ export const ImportStudentsModal: React.FC<ImportStudentsModalProps> = ({ isOpen
                       <th className="p-2.5 min-w-[200px]">NIM &amp; Nama Mahasiswa</th>
                       <th className="p-2.5 min-w-[250px]">Judul Penelitian &amp; Jenis</th>
                       <th className="p-2.5 min-w-[190px]">Dosen Pembimbing</th>
-                      <th className="p-2.5 min-w-[180px]">Dosen Reviewer</th>
                       <th className="p-2.5 text-center w-20">Status</th>
                     </tr>
                   </thead>
@@ -376,19 +375,6 @@ export const ImportStudentsModal: React.FC<ImportStudentsModalProps> = ({ isOpen
                             <div className="font-bold text-slate-900">
                               {advisorLec ? advisorLec.name : row.dosenPembimbing}
                             </div>
-                            <span className="text-[10px] text-slate-500">
-                              (Akan menjadi P2 Sidang)
-                            </span>
-                          </td>
-
-                          {/* Dosen Reviewer */}
-                          <td className="p-2.5">
-                            <div className="inline-flex items-center gap-1 text-[11px] font-medium text-emerald-800 bg-emerald-50 px-2 py-1 rounded-lg border border-emerald-200">
-                              <span>Dipilih di Papan Jadwal</span>
-                            </div>
-                            <span className="text-[10px] text-slate-400 block mt-0.5">
-                              (Akan menjadi P1 Sidang saat lulus)
-                            </span>
                           </td>
 
                           {/* Status */}
