@@ -13,6 +13,7 @@ import {
   MousePointerClick,
   BookOpen,
   ChevronRight,
+  UserPlus
 } from 'lucide-react';
 
 interface QuickScheduleModalProps {
@@ -54,7 +55,7 @@ export const QuickScheduleModal: React.FC<QuickScheduleModalProps> = ({
     [lecturers]
   );
 
-  // For each unassigned student, run the same conflict check used by drag & drop (sorted by NIM)
+  // For each unassigned student, run conflict check
   const candidatesWithStatus = useMemo(() => {
     if (!targetSlot || !targetRoom) return [];
 
@@ -111,7 +112,7 @@ export const QuickScheduleModal: React.FC<QuickScheduleModalProps> = ({
                 Jadwalkan ke Slot Ini
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                Pilih mahasiswa dari antrean untuk ditempatkan di slot yang dipilih
+                Pilih kegiatan mahasiswa (Seminar atau Sidang) dari antrean untuk ditempatkan di slot ini
               </p>
               {/* Slot + Room badge */}
               <div className="flex flex-wrap items-center gap-2 mt-2">
@@ -150,7 +151,7 @@ export const QuickScheduleModal: React.FC<QuickScheduleModalProps> = ({
             </span>
           </div>
           <span className="text-[11px] text-slate-400">
-            {filtered.length} dari {unassignedItems.length} mahasiswa · Diurutkan berdasarkan NIM
+            {filtered.length} dari {unassignedItems.length} antrean · Diurutkan berdasarkan NIM
           </span>
         </div>
 
@@ -178,13 +179,14 @@ export const QuickScheduleModal: React.FC<QuickScheduleModalProps> = ({
                 <p className="font-semibold text-slate-600">Tidak ada mahasiswa ditemukan</p>
                 <p className="text-xs text-slate-400 mt-1">
                   {unassignedItems.length === 0
-                    ? 'Semua mahasiswa telah terjadwal. Gunakan antrean untuk menambah.'
+                    ? 'Semua antrean telah terjadwal.'
                     : 'Coba ubah kata kunci pencarian.'}
                 </p>
               </div>
             </div>
           ) : (
             filtered.map(({ item, conflict }) => {
+              const isSeminar = item.activityType === 'seminar';
               const p1 = lecturerMap.get(item.examiner1Id);
               const p2 = lecturerMap.get(item.examiner2Id);
               const p3 = lecturerMap.get(item.examiner3Id);
@@ -201,7 +203,6 @@ export const QuickScheduleModal: React.FC<QuickScheduleModalProps> = ({
                   onClick={() => {
                     if (!isConflict) {
                       onAssign(item.id);
-                      onClose();
                     }
                   }}
                   title={isConflict ? conflict.reasons.join(' | ') : 'Klik untuk menjadwalkan'}
@@ -211,7 +212,9 @@ export const QuickScheduleModal: React.FC<QuickScheduleModalProps> = ({
                     <div className={`mt-0.5 shrink-0 w-9 h-9 rounded-xl flex items-center justify-center ${
                       isConflict
                         ? 'bg-rose-100 text-rose-500'
-                        : 'bg-emerald-100 text-emerald-600 group-hover:bg-emerald-200 transition-colors'
+                        : isSeminar
+                        ? 'bg-emerald-100 text-emerald-600 group-hover:bg-emerald-200 transition-colors'
+                        : 'bg-indigo-100 text-indigo-600 group-hover:bg-indigo-200 transition-colors'
                     }`}>
                       {isConflict
                         ? <AlertTriangle className="w-4.5 h-4.5" />
@@ -222,9 +225,27 @@ export const QuickScheduleModal: React.FC<QuickScheduleModalProps> = ({
                     {/* Student Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-100">
+                        <span className={`font-mono text-xs font-bold px-2 py-0.5 rounded border ${
+                          isSeminar 
+                            ? 'text-emerald-800 bg-emerald-50 border-emerald-200' 
+                            : 'text-indigo-700 bg-indigo-50 border-indigo-100'
+                        }`}>
                           {item.nim}
                         </span>
+
+                        {/* Activity Badge */}
+                        {isSeminar ? (
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300 uppercase tracking-wider flex items-center gap-1">
+                            <BookOpen className="w-3 h-3 text-emerald-700" />
+                            Seminar Proposal
+                          </span>
+                        ) : (
+                          <span className="text-[10px] font-extrabold px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-800 border border-indigo-200 uppercase tracking-wider flex items-center gap-1">
+                            <GraduationCap className="w-3 h-3 text-indigo-700" />
+                            Sidang Skripsi
+                          </span>
+                        )}
+
                         {item.thesisType && (
                           <span className="text-[10px] uppercase font-bold px-1.5 py-0.5 rounded bg-amber-50 text-amber-700 border border-amber-200">
                             {item.thesisType}
@@ -243,24 +264,44 @@ export const QuickScheduleModal: React.FC<QuickScheduleModalProps> = ({
 
                       {/* Examiner Tags */}
                       <div className="flex flex-wrap items-center gap-1.5 mt-2">
-                        {[
-                          { label: 'P1', name: p1?.name, color: 'bg-indigo-100 text-indigo-700' },
-                          { label: 'P2', name: p2?.name, color: 'bg-sky-100 text-sky-700' },
-                          { label: 'P3', name: p3?.name, color: 'bg-teal-100 text-teal-700' },
-                        ].map(({ label, name, color }) => (
-                          name ? (
-                            <span
-                              key={label}
-                              className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${color}`}
-                            >
+                        {isSeminar ? (
+                          <>
+                            {p1?.name || item.reviewerName ? (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                <Users className="w-3 h-3" />
+                                <strong>Rev:</strong> {p1?.name || item.reviewerName}
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-200">
+                                <UserPlus className="w-3 h-3 text-amber-600" />
+                                <span>Pilih Reviewer Saat Jadwalkan</span>
+                              </span>
+                            )}
+                            <span className="inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full bg-sky-100 text-sky-800">
                               <Users className="w-3 h-3" />
-                              <strong>{label}:</strong> {name}
+                              <strong>Pem:</strong> {p2?.name || item.advisorName || '-'}
                             </span>
-                          ) : null
-                        ))}
+                          </>
+                        ) : (
+                          [
+                            { label: 'P1', name: p1?.name, color: 'bg-indigo-100 text-indigo-700' },
+                            { label: 'P2', name: p2?.name, color: 'bg-sky-100 text-sky-700' },
+                            { label: 'P3', name: p3?.name, color: 'bg-teal-100 text-teal-700' },
+                          ].map(({ label, name, color }) => (
+                            name ? (
+                              <span
+                                key={label}
+                                className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-full ${color}`}
+                              >
+                                <Users className="w-3 h-3" />
+                                <strong>{label}:</strong> {name}
+                              </span>
+                            ) : null
+                          ))
+                        )}
                       </div>
 
-                      {/* Conflict Reason (if any) */}
+                      {/* Conflict Reason */}
                       {isConflict && conflict.reasons.length > 0 && (
                         <div className="mt-2 p-2 bg-rose-50 rounded-lg border border-rose-200">
                           <p className="text-[11px] font-semibold text-rose-700 flex items-start gap-1">
@@ -302,4 +343,3 @@ export const QuickScheduleModal: React.FC<QuickScheduleModalProps> = ({
     </div>
   );
 };
-

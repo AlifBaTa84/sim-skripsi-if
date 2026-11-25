@@ -37,6 +37,33 @@ export interface AcademicPeriod {
   updatedAt?: string;
 }
 
+export type ActivityType = 'seminar' | 'sidang';
+
+export type SeminarRegistrationStatus = 'terdaftar' | 'terjadwal' | 'dalam_proses' | 'selesai' | 'dibatalkan';
+
+export type SeminarExecutionStatus = 'unassigned' | 'scheduled' | 'completed' | 'cancelled';
+
+export type SeminarResult = 'belum_dinilai' | 'lulus' | 'belum_lulus';
+
+export interface SeminarHistoryItem {
+  id?: string;
+  attemptNumber: number;          // Pelaksanaan ke-1, ke-2, ke-3...
+  date: string;
+  timeSlotId: string | null;
+  roomId: string | null;
+  reviewerId: string;
+  reviewerName: string;
+  advisorId: string;
+  advisorName: string;
+  score?: number;
+  result: SeminarResult;
+  feedback?: string;
+  evaluatedAt?: string;
+  evaluatedBy?: string;
+  academicPeriodId: string;
+  academicYear: string;
+}
+
 export interface ScheduleItem {
   id: string;
   nim: string;
@@ -46,12 +73,27 @@ export interface ScheduleItem {
   academicYear: string;
   academicPeriodId?: string;    // Relasi FK ke Periode Akademik aktif/historis
   thesisType?: string;          // e.g. 'Skripsi' | 'Tugas Akhir' (dari kolom Jenis)
-  advisorName?: string;         // Dosen Pembimbing (menjadi Penguji 2)
-  reviewerName?: string;        // Dosen Reviewer (menjadi Ketua Penguji)
+  
+  // Jenis Kegiatan: 'seminar' atau 'sidang' (default 'sidang')
+  activityType?: ActivityType;
+  
+  // Seminar Specific Properties (Decision 2.1 & 2.2)
+  seminarRegistrationId?: string;
+  attemptNumber?: number;             // Pelaksanaan ke-N pada pendaftaran yang sama (same_schedule)
+  seminarStatus?: SeminarRegistrationStatus;
+  seminarResult?: SeminarResult;      // 'belum_dinilai' | 'lulus' | 'belum_lulus'
+  seminarHistory?: SeminarHistoryItem[]; // Riwayat pelaksanaan sebelumnya tetap tersimpan
+  isSeminarPassed?: boolean;          // Status sah kelayakan mengikuti Sidang (Syarat Wajib Sidang)
+  
+  // Examiners:
+  // - Pada Seminar: examiner1Id = Reviewer (Dipilih Admin pada Papan Jadwal), examiner2Id = Pembimbing, examiner3Id = '' (Tidak ada P3)
+  // - Pada Sidang: examiner1Id = Ketua Penguji (Terkunci dari Reviewer Seminar Lulus), examiner2Id = Pembimbing Seminar, examiner3Id = Ditentukan Admin
+  advisorName?: string;         // Dosen Pembimbing (Seminar & Sidang)
+  reviewerName?: string;        // Dosen Reviewer (Ketua Penguji)
   seminarScore?: string | number; // Nilai Seminar Proposal/Kemajuan
-  examiner1Id: string;          // Ketua Penguji (Dosen Reviewer)
-  examiner2Id: string;          // Penguji 2 (Dosen Pembimbing)
-  examiner3Id: string;          // Penguji 3 (Dipilih admin berdasarkan ketersediaan waktu bebas bentrok)
+  examiner1Id: string;          // Reviewer (Seminar) / Ketua Penguji (Sidang)
+  examiner2Id: string;          // Pembimbing (Seminar & Sidang)
+  examiner3Id: string;          // Penguji 3 (Hanya Sidang, Seminar kosong)
   date: string;                 // YYYY-MM-DD
   timeSlotId: string | null;
   roomId: string | null;
@@ -65,8 +107,9 @@ export interface ImportedStudentRow {
   judul: string;
   jenis: string;
   dosenPembimbing: string;
-  dosenReviewer: string;
-  nilaiSeminar: string | number;
+  dosenReviewer?: string;       // Opsional pada Impor Seminar
+  nilaiSeminar?: string | number;
+  activityType?: ActivityType;
   matchedAdvisorId?: string;
   matchedReviewerId?: string;
   selectedExaminer3Id?: string;

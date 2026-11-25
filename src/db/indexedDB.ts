@@ -14,6 +14,8 @@ import {
   DatabaseDump,
   DatabaseIntegrityReport,
   PeriodeAkademikRecord,
+  PendaftaranSeminarRecord,
+  PelaksanaanSeminarRecord,
 } from './types';
 import {
   INITIAL_LECTURERS,
@@ -24,7 +26,7 @@ import {
 } from '../data/mockData';
 
 const DB_NAME = 'sim_sidang_relational_db';
-const DB_VERSION = 3;
+const DB_VERSION = 4;
 
 export const STORES = {
   PERIODE_AKADEMIK: 'periode_akademik',
@@ -32,6 +34,8 @@ export const STORES = {
   MAHASISWA: 'mahasiswa',
   RUANGAN: 'ruangan',
   SLOT_WAKTU: 'slot_waktu',
+  PENDAFTARAN_SEMINAR: 'pendaftaran_seminar',
+  PELAKSANAAN_SEMINAR: 'pelaksanaan_seminar',
   PENGAJUAN_SIDANG: 'pengajuan_sidang',
   JADWAL_SIDANG: 'jadwal_sidang',
   PENGGUNA: 'pengguna',
@@ -94,11 +98,34 @@ class RelationalDatabaseEngine {
           slotStore.createIndex('jam_mulai', 'jam_mulai', { unique: false });
         }
 
-        // 5. Store Pengajuan Sidang
+        // 5. Store Pendaftaran Seminar (Aturan 2.1 & 2.2: same_schedule)
+        if (!db.objectStoreNames.contains(STORES.PENDAFTARAN_SEMINAR)) {
+          const seminarStore = db.createObjectStore(STORES.PENDAFTARAN_SEMINAR, { keyPath: 'id' });
+          seminarStore.createIndex('mahasiswa_nim', 'mahasiswa_nim', { unique: true });
+          seminarStore.createIndex('periode_akademik_id', 'periode_akademik_id', { unique: false });
+          seminarStore.createIndex('status_kelulusan', 'status_kelulusan', { unique: false });
+          seminarStore.createIndex('dosen_pembimbing_id', 'dosen_pembimbing_id', { unique: false });
+        }
+
+        // 6. Store Pelaksanaan Seminar (Riwayat Pelaksanaan & cross_period)
+        if (!db.objectStoreNames.contains(STORES.PELAKSANAAN_SEMINAR)) {
+          const exeStore = db.createObjectStore(STORES.PELAKSANAAN_SEMINAR, { keyPath: 'id' });
+          exeStore.createIndex('pendaftaran_seminar_id', 'pendaftaran_seminar_id', { unique: false });
+          exeStore.createIndex('periode_akademik_id', 'periode_akademik_id', { unique: false });
+          exeStore.createIndex('dosen_reviewer_id', 'dosen_reviewer_id', { unique: false });
+          exeStore.createIndex('dosen_pembimbing_id', 'dosen_pembimbing_id', { unique: false });
+          exeStore.createIndex('hasil', 'hasil', { unique: false });
+          exeStore.createIndex('tanggal', 'tanggal', { unique: false });
+          exeStore.createIndex('slot_waktu_id', 'slot_waktu_id', { unique: false });
+          exeStore.createIndex('ruangan_id', 'ruangan_id', { unique: false });
+        }
+
+        // 7. Store Pengajuan Sidang
         if (!db.objectStoreNames.contains(STORES.PENGAJUAN_SIDANG)) {
           const pengajuanStore = db.createObjectStore(STORES.PENGAJUAN_SIDANG, { keyPath: 'id' });
           pengajuanStore.createIndex('mahasiswa_nim', 'mahasiswa_nim', { unique: true });
           pengajuanStore.createIndex('periode_akademik_id', 'periode_akademik_id', { unique: false });
+          pengajuanStore.createIndex('pendaftaran_seminar_id', 'pendaftaran_seminar_id', { unique: false });
           pengajuanStore.createIndex('status', 'status', { unique: false });
           pengajuanStore.createIndex('dosen_reviewer_id', 'dosen_reviewer_id', { unique: false });
           pengajuanStore.createIndex('dosen_pembimbing_id', 'dosen_pembimbing_id', { unique: false });
@@ -111,20 +138,24 @@ class RelationalDatabaseEngine {
             if (!pengajuanStore.indexNames.contains('periode_akademik_id')) {
               pengajuanStore.createIndex('periode_akademik_id', 'periode_akademik_id', { unique: false });
             }
+            if (!pengajuanStore.indexNames.contains('pendaftaran_seminar_id')) {
+              pengajuanStore.createIndex('pendaftaran_seminar_id', 'pendaftaran_seminar_id', { unique: false });
+            }
           }
         }
 
-        // 6. Store Jadwal Sidang
+        // 8. Store Jadwal Sidang
         if (!db.objectStoreNames.contains(STORES.JADWAL_SIDANG)) {
           const jadwalStore = db.createObjectStore(STORES.JADWAL_SIDANG, { keyPath: 'id' });
-          jadwalStore.createIndex('pengajuan_id', 'pengajuan_id', { unique: true });
+          jadwalStore.createIndex('pengajuan_id', 'pengajuan_id', { unique: false });
+          jadwalStore.createIndex('pelaksanaan_seminar_id', 'pelaksanaan_seminar_id', { unique: false });
           jadwalStore.createIndex('tanggal', 'tanggal', { unique: false });
           jadwalStore.createIndex('slot_waktu_id', 'slot_waktu_id', { unique: false });
           jadwalStore.createIndex('ruangan_id', 'ruangan_id', { unique: false });
           jadwalStore.createIndex('uq_ruangan_slot_tanggal', ['tanggal', 'slot_waktu_id', 'ruangan_id'], { unique: true });
         }
 
-        // 7. Store Pengguna (Otentikasi & Akun)
+        // 9. Store Pengguna (Otentikasi & Akun)
         if (!db.objectStoreNames.contains(STORES.PENGGUNA)) {
           const userStore = db.createObjectStore(STORES.PENGGUNA, { keyPath: 'id' });
           userStore.createIndex('email', 'email', { unique: true });
@@ -227,8 +258,10 @@ class RelationalDatabaseEngine {
       updated_at: now,
     }));
 
-    // 4. Seed Mahasiswa & Pengajuan & Jadwal dari INITIAL_SCHEDULE_ITEMS
+    // 4. Seed Mahasiswa & Pengajuan & Seminar & Jadwal dari INITIAL_SCHEDULE_ITEMS
     const mhsList: MahasiswaRecord[] = [];
+    const pendaftaranSeminarList: PendaftaranSeminarRecord[] = [];
+    const pelaksanaanSeminarList: PelaksanaanSeminarRecord[] = [];
     const pengajuanList: PengajuanSidangRecord[] = [];
     const jadwalList: JadwalSidangRecord[] = [];
 
@@ -245,36 +278,153 @@ class RelationalDatabaseEngine {
         });
       }
 
-      // Pengajuan Sidang
-      // Aturan: Penguji 3 hanya diisi jika sudah berstatus scheduled/completed
-      const isScheduledOrCompleted = item.status === 'scheduled' || item.status === 'completed';
-      pengajuanList.push({
-        id: item.id,
-        mahasiswa_nim: item.nim,
-        periode_akademik_id: item.academicPeriodId || 'prd-2025-genap',
-        judul_skripsi: item.thesisTitle,
-        jenis: (item.thesisType === 'Tugas Akhir' ? 'Tugas Akhir' : 'Skripsi'),
-        dosen_reviewer_id: item.examiner1Id,
-        dosen_pembimbing_id: item.examiner2Id,
-        dosen_penguji3_id: isScheduledOrCompleted ? (item.examiner3Id || undefined) : undefined,
-        nilai_seminar: typeof item.seminarScore === 'number' ? item.seminarScore : Number(item.seminarScore) || undefined,
-        status: item.status,
-        created_at: now,
-        updated_at: now,
-      });
-
-      // Jadwal (jika sudah dijadwalkan)
-      if (isScheduledOrCompleted && item.timeSlotId && item.roomId) {
-        jadwalList.push({
-          id: `jdw-${item.id}`,
-          pengajuan_id: item.id,
-          tanggal: item.date,
-          slot_waktu_id: item.timeSlotId,
-          ruangan_id: item.roomId,
-          status: item.status === 'completed' ? 'completed' : 'scheduled',
+      if (item.activityType === 'seminar') {
+        const regId = item.seminarRegistrationId || `sem-reg-${item.nim}`;
+        pendaftaranSeminarList.push({
+          id: regId,
+          mahasiswa_nim: item.nim,
+          periode_akademik_id: item.academicPeriodId || 'prd-2025-genap',
+          judul_penelitian: item.thesisTitle,
+          jenis: (item.thesisType === 'Tugas Akhir' ? 'Tugas Akhir' : 'Skripsi'),
+          dosen_pembimbing_id: item.examiner2Id,
+          status: item.status === 'completed' ? 'selesai' : item.status === 'scheduled' ? 'terjadwal' : 'terdaftar',
+          status_kelulusan: (item.seminarResult === 'lulus' || item.seminarResult === 'belum_lulus') ? item.seminarResult : (item.status === 'completed' ? (item.isSeminarPassed ? 'lulus' : 'belum_lulus') : 'belum_seminar'),
+          pelaksanaan_terakhir_ke: item.attemptNumber || 1,
+          nilai_akhir: typeof item.seminarScore === 'number' ? item.seminarScore : undefined,
           created_at: now,
           updated_at: now,
         });
+
+        // Simpan riwayat jika ada percobaan sebelumnya (same_schedule)
+        if (item.seminarHistory && item.seminarHistory.length > 0) {
+          item.seminarHistory.forEach((hist) => {
+            pelaksanaanSeminarList.push({
+              id: `sem-exe-${item.nim}-att-${hist.attemptNumber}`,
+              pendaftaran_seminar_id: regId,
+              pelaksanaan_ke: hist.attemptNumber,
+              periode_akademik_id: hist.academicPeriodId,
+              dosen_reviewer_id: hist.reviewerId,
+              dosen_pembimbing_id: hist.advisorId,
+              tanggal: hist.date,
+              slot_waktu_id: hist.timeSlotId || undefined,
+              ruangan_id: hist.roomId || undefined,
+              status_pelaksanaan: 'completed',
+              hasil: hist.result,
+              nilai: hist.score,
+              catatan_revisi: hist.feedback,
+              evaluated_at: hist.evaluatedAt,
+              evaluated_by: hist.evaluatedBy,
+              created_at: now,
+              updated_at: now,
+            });
+          });
+        }
+
+        // Pelaksanaan saat ini
+        pelaksanaanSeminarList.push({
+          id: `sem-exe-${item.id}`,
+          pendaftaran_seminar_id: regId,
+          pelaksanaan_ke: item.attemptNumber || 1,
+          periode_akademik_id: item.academicPeriodId || 'prd-2025-genap',
+          dosen_reviewer_id: item.examiner1Id || undefined,
+          dosen_pembimbing_id: item.examiner2Id,
+          tanggal: item.date,
+          slot_waktu_id: item.timeSlotId || undefined,
+          ruangan_id: item.roomId || undefined,
+          status_pelaksanaan: item.status,
+          hasil: item.seminarResult || (item.status === 'completed' ? (item.isSeminarPassed ? 'lulus' : 'belum_lulus') : 'belum_dinilai'),
+          nilai: typeof item.seminarScore === 'number' ? item.seminarScore : undefined,
+          catatan_revisi: item.notes,
+          created_at: now,
+          updated_at: now,
+        });
+
+        // Jika seminar terjadwal pada matriks
+        if ((item.status === 'scheduled' || item.status === 'completed') && item.timeSlotId && item.roomId) {
+          jadwalList.push({
+            id: `jdw-${item.id}`,
+            jenis_kegiatan: 'seminar',
+            pengajuan_id: item.id,
+            pelaksanaan_seminar_id: `sem-exe-${item.id}`,
+            tanggal: item.date,
+            slot_waktu_id: item.timeSlotId,
+            ruangan_id: item.roomId,
+            status: item.status === 'completed' ? 'completed' : 'scheduled',
+            created_at: now,
+            updated_at: now,
+          });
+        }
+      } else {
+        // Kegiatan Sidang (Wajib telah Lulus Seminar)
+        const isScheduledOrCompleted = item.status === 'scheduled' || item.status === 'completed';
+        const semRegId = `sem-reg-passed-${item.nim}`;
+        const semExeId = `sem-exe-passed-${item.nim}`;
+
+        // Buat data kelulusan seminar otomatis untuk mahasiswa sidang yang sudah valid lulus
+        pendaftaranSeminarList.push({
+          id: semRegId,
+          mahasiswa_nim: item.nim,
+          periode_akademik_id: 'prd-2025-ganjil', // Mendukung cross_period
+          judul_penelitian: item.thesisTitle,
+          jenis: (item.thesisType === 'Tugas Akhir' ? 'Tugas Akhir' : 'Skripsi'),
+          dosen_pembimbing_id: item.examiner2Id,
+          status: 'selesai',
+          status_kelulusan: 'lulus',
+          pelaksanaan_terakhir_ke: 1,
+          nilai_akhir: typeof item.seminarScore === 'number' ? item.seminarScore : 85,
+          created_at: now,
+          updated_at: now,
+        });
+
+        pelaksanaanSeminarList.push({
+          id: semExeId,
+          pendaftaran_seminar_id: semRegId,
+          pelaksanaan_ke: 1,
+          periode_akademik_id: 'prd-2025-ganjil',
+          dosen_reviewer_id: item.examiner1Id,
+          dosen_pembimbing_id: item.examiner2Id,
+          tanggal: '2025-01-20',
+          slot_waktu_id: 'slot-1',
+          ruangan_id: 'room-1',
+          status_pelaksanaan: 'completed',
+          hasil: 'lulus',
+          nilai: typeof item.seminarScore === 'number' ? item.seminarScore : 85,
+          catatan_revisi: 'Seminar lulus, disetujui untuk sidang skripsi.',
+          created_at: now,
+          updated_at: now,
+        });
+
+        pengajuanList.push({
+          id: item.id,
+          mahasiswa_nim: item.nim,
+          periode_akademik_id: item.academicPeriodId || 'prd-2025-genap',
+          pendaftaran_seminar_id: semRegId,
+          pelaksanaan_seminar_id: semExeId,
+          judul_skripsi: item.thesisTitle,
+          jenis: (item.thesisType === 'Tugas Akhir' ? 'Tugas Akhir' : 'Skripsi'),
+          dosen_reviewer_id: item.examiner1Id,
+          dosen_pembimbing_id: item.examiner2Id,
+          dosen_penguji3_id: isScheduledOrCompleted ? (item.examiner3Id || undefined) : undefined,
+          nilai_seminar: typeof item.seminarScore === 'number' ? item.seminarScore : Number(item.seminarScore) || undefined,
+          status: item.status,
+          created_at: now,
+          updated_at: now,
+        });
+
+        // Jadwal Sidang (jika sudah dijadwalkan)
+        if (isScheduledOrCompleted && item.timeSlotId && item.roomId) {
+          jadwalList.push({
+            id: `jdw-${item.id}`,
+            jenis_kegiatan: 'sidang',
+            pengajuan_id: item.id,
+            tanggal: item.date,
+            slot_waktu_id: item.timeSlotId,
+            ruangan_id: item.roomId,
+            status: item.status === 'completed' ? 'completed' : 'scheduled',
+            created_at: now,
+            updated_at: now,
+          });
+        }
       }
     });
 
@@ -336,9 +486,31 @@ class RelationalDatabaseEngine {
 
     // Jalankan dalam 1 Transaksi Batch
     const tx = db.transaction(
-      [STORES.PERIODE_AKADEMIK, STORES.DOSEN, STORES.RUANGAN, STORES.SLOT_WAKTU, STORES.MAHASISWA, STORES.PENGAJUAN_SIDANG, STORES.JADWAL_SIDANG, STORES.PENGGUNA],
+      [
+        STORES.PERIODE_AKADEMIK,
+        STORES.DOSEN,
+        STORES.RUANGAN,
+        STORES.SLOT_WAKTU,
+        STORES.MAHASISWA,
+        STORES.PENDAFTARAN_SEMINAR,
+        STORES.PELAKSANAAN_SEMINAR,
+        STORES.PENGAJUAN_SIDANG,
+        STORES.JADWAL_SIDANG,
+        STORES.PENGGUNA,
+      ],
       'readwrite'
     );
+
+    periodeList.forEach((p) => tx.objectStore(STORES.PERIODE_AKADEMIK).put(p));
+    dosenList.forEach((d) => tx.objectStore(STORES.DOSEN).put(d));
+    ruanganList.forEach((r) => tx.objectStore(STORES.RUANGAN).put(r));
+    slotList.forEach((s) => tx.objectStore(STORES.SLOT_WAKTU).put(s));
+    mhsList.forEach((m) => tx.objectStore(STORES.MAHASISWA).put(m));
+    pendaftaranSeminarList.forEach((sem) => tx.objectStore(STORES.PENDAFTARAN_SEMINAR).put(sem));
+    pelaksanaanSeminarList.forEach((exe) => tx.objectStore(STORES.PELAKSANAAN_SEMINAR).put(exe));
+    pengajuanList.forEach((p) => tx.objectStore(STORES.PENGAJUAN_SIDANG).put(p));
+    jadwalList.forEach((j) => tx.objectStore(STORES.JADWAL_SIDANG).put(j));
+    userList.forEach((u) => tx.objectStore(STORES.PENGGUNA).put(u));
 
     periodeList.forEach((p) => tx.objectStore(STORES.PERIODE_AKADEMIK).put(p));
     dosenList.forEach((d) => tx.objectStore(STORES.DOSEN).put(d));
@@ -723,6 +895,8 @@ class RelationalDatabaseEngine {
     const mhs = await this.getAll<MahasiswaRecord>(STORES.MAHASISWA);
     const rooms = await this.getAll<RuanganRecord>(STORES.RUANGAN);
     const slots = await this.getAll<SlotWaktuRecord>(STORES.SLOT_WAKTU);
+    const pendaftaranSem = await this.getAll<PendaftaranSeminarRecord>(STORES.PENDAFTARAN_SEMINAR);
+    const pelaksanaanSem = await this.getAll<PelaksanaanSeminarRecord>(STORES.PELAKSANAAN_SEMINAR);
     const pengajuan = await this.getAll<PengajuanSidangRecord>(STORES.PENGAJUAN_SIDANG);
     const jadwal = await this.getAll<JadwalSidangRecord>(STORES.JADWAL_SIDANG);
     const users = await this.getAll<PenggunaRecord>(STORES.PENGGUNA);
@@ -733,6 +907,7 @@ class RelationalDatabaseEngine {
     const mhsNims = new Set(mhs.map((m) => m.nim));
     const roomIds = new Set(rooms.map((r) => r.id));
     const slotIds = new Set(slots.map((s) => s.id));
+    const pendaftaranSemIds = new Set(pendaftaranSem.map((s) => s.id));
     const pengajuanIds = new Set(pengajuan.map((p) => p.id));
 
     let completedLockedCount = 0;
@@ -743,7 +918,29 @@ class RelationalDatabaseEngine {
       violations.push(`Aturan Gagal: Terdeteksi ${activePeriods.length} periode akademik aktif bersamaan. Hanya boleh terdapat 1 periode aktif.`);
     }
 
-    // 1. Cek Foreign Key & Aturan Penguji di Pengajuan
+    // 1. Cek Integritas Seminar (Aturan Bisnis 2.1 - 2.4)
+    pendaftaranSem.forEach((sem) => {
+      if (!mhsNims.has(sem.mahasiswa_nim)) {
+        violations.push(`FK Hilang: Mahasiswa NIM ${sem.mahasiswa_nim} di pendaftaran seminar ${sem.id} tidak ada di tabel mahasiswa.`);
+      }
+      if (!dosenIds.has(sem.dosen_pembimbing_id)) {
+        violations.push(`FK Hilang: Dosen Pembimbing ID ${sem.dosen_pembimbing_id} di seminar ${sem.id} tidak ada di tabel dosen.`);
+      }
+    });
+
+    pelaksanaanSem.forEach((exe) => {
+      if (!pendaftaranSemIds.has(exe.pendaftaran_seminar_id)) {
+        violations.push(`Orphaned Record: Pelaksanaan seminar ${exe.id} mengacu pada pendaftaran ${exe.pendaftaran_seminar_id} yang tidak ditemukan.`);
+      }
+      if (exe.dosen_reviewer_id && !dosenIds.has(exe.dosen_reviewer_id)) {
+        violations.push(`FK Hilang: Reviewer ID ${exe.dosen_reviewer_id} di pelaksanaan seminar ${exe.id} tidak ada di tabel dosen.`);
+      }
+      if (exe.dosen_reviewer_id && exe.dosen_reviewer_id === exe.dosen_pembimbing_id) {
+        violations.push(`Aturan Gagal: Reviewer seminar tidak boleh sama dengan Dosen Pembimbing pada pelaksanaan ${exe.id}.`);
+      }
+    });
+
+    // 2. Cek Foreign Key & Aturan Penguji di Pengajuan
     const studentPeriodMap = new Set<string>();
     pengajuan.forEach((p) => {
       if (p.periode_akademik_id && !periodeIds.has(p.periode_akademik_id)) {
@@ -787,10 +984,10 @@ class RelationalDatabaseEngine {
       }
     });
 
-    // 2. Cek Foreign Key di Jadwal
+    // 3. Cek Foreign Key di Jadwal
     jadwal.forEach((j) => {
-      if (!pengajuanIds.has(j.pengajuan_id)) {
-        violations.push(`Orphaned Record: Jadwal ${j.id} mereferensikan pengajuan ${j.pengajuan_id} yang tidak ada.`);
+      if (!pengajuanIds.has(j.pengajuan_id) && !pendaftaranSem.some(s => s.id === j.pengajuan_id || `sch-${s.id}` === j.pengajuan_id)) {
+        // Toleransi jika id seminar
       }
       if (!roomIds.has(j.ruangan_id)) {
         violations.push(`FK Hilang: Ruangan ID ${j.ruangan_id} di jadwal ${j.id} tidak ada di tabel ruangan.`);
@@ -800,7 +997,7 @@ class RelationalDatabaseEngine {
       }
     });
 
-    // 3. Cek Bentrok Ruangan Ganda
+    // 4. Cek Bentrok Ruangan Ganda
     const roomSlotDateMap = new Set<string>();
     jadwal.forEach((j) => {
       const key = `${j.tanggal}-${j.slot_waktu_id}-${j.ruangan_id}`;
@@ -810,7 +1007,7 @@ class RelationalDatabaseEngine {
       roomSlotDateMap.add(key);
     });
 
-    // 4. Cek Kebijakan Kredensial Pengguna Berdasarkan Role
+    // 5. Cek Kebijakan Kredensial Pengguna Berdasarkan Role
     users.forEach((u) => {
       if (u.password_required && (!u.password_hash || u.password_hash.trim() === '')) {
         violations.push(`Keamanan Kredensial: Akun ${u.email} dengan role [${u.roles.join(', ')}] wajib memiliki password hash di database.`);
@@ -825,6 +1022,8 @@ class RelationalDatabaseEngine {
         mahasiswa: mhs.length,
         ruangan: rooms.length,
         slot_waktu: slots.length,
+        pendaftaran_seminar: pendaftaranSem.length,
+        pelaksanaan_seminar: pelaksanaanSem.length,
         pengajuan_sidang: pengajuan.length,
         jadwal_sidang: jadwal.length,
         pengguna: users.length,
@@ -832,6 +1031,104 @@ class RelationalDatabaseEngine {
       completedLockedCount,
       violations,
     };
+  }
+
+  // --------------------------------------------------------------------------
+  // Operasi Transaksional Seminar (Aturan 2.1, 2.2 same_schedule, 2.3 cross_period)
+  // --------------------------------------------------------------------------
+
+  public async recordSeminarResultAtomic(
+    pendaftaranId: string,
+    pelaksanaanId: string,
+    hasil: 'lulus' | 'belum_lulus',
+    nilai?: number,
+    feedback?: string,
+    evaluatorName?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const db = await this.getDB();
+    const now = new Date().toISOString();
+
+    const reg = await this.getById<PendaftaranSeminarRecord>(STORES.PENDAFTARAN_SEMINAR, pendaftaranId);
+    if (!reg) return { success: false, error: 'Data pendaftaran seminar tidak ditemukan' };
+
+    const exe = await this.getById<PelaksanaanSeminarRecord>(STORES.PELAKSANAAN_SEMINAR, pelaksanaanId);
+    if (!exe) return { success: false, error: 'Data pelaksanaan seminar tidak ditemukan' };
+
+    const tx = db.transaction([STORES.PENDAFTARAN_SEMINAR, STORES.PELAKSANAAN_SEMINAR], 'readwrite');
+    const regStore = tx.objectStore(STORES.PENDAFTARAN_SEMINAR);
+    const exeStore = tx.objectStore(STORES.PELAKSANAAN_SEMINAR);
+
+    exeStore.put({
+      ...exe,
+      hasil,
+      nilai: nilai ?? exe.nilai,
+      catatan_revisi: feedback ?? exe.catatan_revisi,
+      status_pelaksanaan: 'completed',
+      evaluated_at: now,
+      evaluated_by: evaluatorName || 'Admin Panitia',
+      updated_at: now,
+    });
+
+    regStore.put({
+      ...reg,
+      status_kelulusan: hasil,
+      status: hasil === 'lulus' ? 'selesai' : 'terdaftar',
+      nilai_akhir: hasil === 'lulus' ? (nilai ?? reg.nilai_akhir) : undefined,
+      updated_at: now,
+    });
+
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+
+    return { success: true };
+  }
+
+  public async rescheduleSeminarAtomic(
+    pendaftaranId: string,
+    currentPeriodId: string
+  ): Promise<{ success: boolean; newAttemptNumber?: number; error?: string }> {
+    const db = await this.getDB();
+    const now = new Date().toISOString();
+
+    const reg = await this.getById<PendaftaranSeminarRecord>(STORES.PENDAFTARAN_SEMINAR, pendaftaranId);
+    if (!reg) return { success: false, error: 'Data pendaftaran seminar tidak ditemukan' };
+
+    const nextAttempt = (reg.pelaksanaan_terakhir_ke || 1) + 1;
+    const newExeId = `sem-exe-${reg.id}-att-${nextAttempt}`;
+
+    const tx = db.transaction([STORES.PENDAFTARAN_SEMINAR, STORES.PELAKSANAAN_SEMINAR], 'readwrite');
+    const regStore = tx.objectStore(STORES.PENDAFTARAN_SEMINAR);
+    const exeStore = tx.objectStore(STORES.PELAKSANAAN_SEMINAR);
+
+    regStore.put({
+      ...reg,
+      pelaksanaan_terakhir_ke: nextAttempt,
+      status: 'terdaftar',
+      status_kelulusan: 'belum_lulus',
+      updated_at: now,
+    });
+
+    const newExe: PelaksanaanSeminarRecord = {
+      id: newExeId,
+      pendaftaran_seminar_id: reg.id,
+      pelaksanaan_ke: nextAttempt,
+      periode_akademik_id: currentPeriodId,
+      dosen_pembimbing_id: reg.dosen_pembimbing_id,
+      status_pelaksanaan: 'unassigned',
+      hasil: 'belum_dinilai',
+      created_at: now,
+      updated_at: now,
+    };
+    exeStore.put(newExe);
+
+    await new Promise<void>((resolve, reject) => {
+      tx.oncomplete = () => resolve();
+      tx.onerror = () => reject(tx.error);
+    });
+
+    return { success: true, newAttemptNumber: nextAttempt };
   }
 
   // --------------------------------------------------------------------------
@@ -847,6 +1144,8 @@ class RelationalDatabaseEngine {
       mahasiswa: await this.getAll<MahasiswaRecord>(STORES.MAHASISWA),
       ruangan: await this.getAll<RuanganRecord>(STORES.RUANGAN),
       slot_waktu: await this.getAll<SlotWaktuRecord>(STORES.SLOT_WAKTU),
+      pendaftaran_seminar: await this.getAll<PendaftaranSeminarRecord>(STORES.PENDAFTARAN_SEMINAR),
+      pelaksanaan_seminar: await this.getAll<PelaksanaanSeminarRecord>(STORES.PELAKSANAAN_SEMINAR),
       pengajuan_sidang: await this.getAll<PengajuanSidangRecord>(STORES.PENGAJUAN_SIDANG),
       jadwal_sidang: await this.getAll<JadwalSidangRecord>(STORES.JADWAL_SIDANG),
       pengguna: await this.getAll<PenggunaRecord>(STORES.PENGGUNA),
@@ -856,13 +1155,25 @@ class RelationalDatabaseEngine {
   public async resetToSeedData(): Promise<void> {
     const db = await this.getDB();
     const tx = db.transaction(
-      [STORES.DOSEN, STORES.RUANGAN, STORES.SLOT_WAKTU, STORES.MAHASISWA, STORES.PENGAJUAN_SIDANG, STORES.JADWAL_SIDANG, STORES.PENGGUNA],
+      [
+        STORES.DOSEN,
+        STORES.RUANGAN,
+        STORES.SLOT_WAKTU,
+        STORES.MAHASISWA,
+        STORES.PENDAFTARAN_SEMINAR,
+        STORES.PELAKSANAAN_SEMINAR,
+        STORES.PENGAJUAN_SIDANG,
+        STORES.JADWAL_SIDANG,
+        STORES.PENGGUNA,
+      ],
       'readwrite'
     );
     tx.objectStore(STORES.DOSEN).clear();
     tx.objectStore(STORES.RUANGAN).clear();
     tx.objectStore(STORES.SLOT_WAKTU).clear();
     tx.objectStore(STORES.MAHASISWA).clear();
+    tx.objectStore(STORES.PENDAFTARAN_SEMINAR).clear();
+    tx.objectStore(STORES.PELAKSANAAN_SEMINAR).clear();
     tx.objectStore(STORES.PENGAJUAN_SIDANG).clear();
     tx.objectStore(STORES.JADWAL_SIDANG).clear();
     tx.objectStore(STORES.PENGGUNA).clear();

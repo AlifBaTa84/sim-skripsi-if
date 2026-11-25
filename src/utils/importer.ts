@@ -74,9 +74,17 @@ export async function parseImportFile(file: File): Promise<any[]> {
 
 /**
  * Map raw sheet rows to validated ImportedStudentRow
- * Standard required columns: NIM, Nama, Judul, Jenis, Dosen Pembimbing, Dosen Reviewer, Nilai Seminar
+ * Standard required columns: NIM, Nama, Judul, Jenis, Dosen Pembimbing
+ * - Sidang: Memerlukan Dosen Reviewer & Nilai Seminar
+ * - Seminar: Reviewer opsional pada file impor (ditentukan Admin pada Papan Jadwal - Aturan 2.4)
  */
-export function processImportRows(rawRows: any[], lecturers: Lecturer[]): ImportedStudentRow[] {
+export function processImportRows(
+  rawRows: any[], 
+  lecturers: Lecturer[],
+  activityType: 'seminar' | 'sidang' = 'sidang'
+): ImportedStudentRow[] {
+  const isSeminar = activityType === 'seminar';
+
   return rawRows.map((row) => {
     // Flexible column lookup (case-insensitive & aliases)
     const findValue = (keys: string[]): string => {
@@ -94,20 +102,24 @@ export function processImportRows(rawRows: any[], lecturers: Lecturer[]): Import
     const nim = findValue(['nim', 'nomorinduk', 'student_id']);
     const nama = findValue(['nama', 'namamahasiswa', 'namalengkap', 'student_name']);
     const judul = findValue(['judul', 'judultugasakhir', 'judulskripsi', 'title']);
-    const jenis = findValue(['jenis', 'jenissidang', 'tipe', 'type']) || 'Skripsi';
+    const jenis = findValue(['jenis', 'jenissidang', 'tipe', 'type']) || (isSeminar ? 'Seminar Proposal' : 'Skripsi');
     const dosenPembimbing = findValue(['dosenpembimbing', 'pembimbing', 'advisor', 'pembimbing1']);
     const dosenReviewer = findValue(['dosenreviewer', 'reviewer', 'pengujireviewer', 'pengujiseminar']);
     const nilaiSeminar = findValue(['nilaiseminar', 'nilai', 'score', 'nilaisempro']);
 
     const matchedAdvisor = matchLecturerByName(dosenPembimbing, lecturers);
-    const matchedReviewer = matchLecturerByName(dosenReviewer, lecturers);
+    const matchedReviewer = isSeminar ? null : matchLecturerByName(dosenReviewer, lecturers);
 
     const validationErrors: string[] = [];
     if (!nim) validationErrors.push('NIM wajib diisi');
     if (!nama) validationErrors.push('Nama mahasiswa wajib diisi');
     if (!judul) validationErrors.push('Judul skripsi wajib diisi');
     if (!dosenPembimbing) validationErrors.push('Dosen Pembimbing wajib diisi');
-    if (!dosenReviewer) validationErrors.push('Dosen Reviewer wajib diisi');
+    
+    // Aturan 2.4: Pada Seminar, kolom Reviewer tidak wajib pada file impor
+    if (!isSeminar && !dosenReviewer) {
+      validationErrors.push('Dosen Reviewer wajib diisi');
+    }
 
     // Rule: Reviewer and Advisor cannot be the same lecturer
     if (matchedAdvisor && matchedReviewer && matchedAdvisor.id === matchedReviewer.id) {
@@ -120,8 +132,9 @@ export function processImportRows(rawRows: any[], lecturers: Lecturer[]): Import
       judul,
       jenis,
       dosenPembimbing,
-      dosenReviewer,
+      dosenReviewer: isSeminar ? (dosenReviewer || '') : dosenReviewer,
       nilaiSeminar: nilaiSeminar || '-',
+      activityType,
       matchedAdvisorId: matchedAdvisor?.id,
       matchedReviewerId: matchedReviewer?.id,
       isValid: validationErrors.length === 0,
@@ -338,54 +351,84 @@ export function getSampleCSVContent(): string {
 /**
  * Downloads a pre-formatted sample Excel/CSV template for the user
  */
-export function downloadSampleTemplate(format: 'csv' | 'xlsx' = 'xlsx') {
-  const data = [
-    {
-      'NIM': '10120301',
-      'Nama': 'FARHAN KURNIAWAN',
-      'Judul': 'Sistem Rekomendasi Pemilihan Dosen Pembimbing Menggunakan Algoritma Content-Based Filtering',
-      'Jenis': 'Skripsi',
-      'Dosen Pembimbing': 'Andri Heryandi, S.T., M.T.',
-      'Dosen Reviewer': 'Dian Dharmayanti, S.T., M.Kom.',
-      'Nilai Seminar': 86.5
-    },
-    {
-      'NIM': '10120305',
-      'Nama': 'TIARA ANGGRAENI',
-      'Judul': 'Penerapan Algoritma YOLOv8 untuk Deteksi Rambu Lalu Lintas Secara Real-Time pada Kendaraan Otonom',
-      'Jenis': 'Skripsi',
-      'Dosen Pembimbing': 'Chrismikha Hardyanto, M.Kom.',
-      'Dosen Reviewer': 'Iskandar Ikbal, M.Kom.',
-      'Nilai Seminar': 88.0
-    },
-    {
-      'NIM': '10120310',
-      'Nama': 'RIZKY RAMADHAN',
-      'Judul': 'Pengembangan Aplikasi Pemantau Kualitas Udara IoT Berbasis ESP32 dan Dashboard Web',
-      'Jenis': 'Tugas Akhir',
-      'Dosen Pembimbing': 'Sopian Alviana, M.Kom.',
-      'Dosen Reviewer': 'Angga Setiyadi, M.Kom., CITPM',
-      'Nilai Seminar': 84.5
-    },
-    {
-      'NIM': '10120315',
-      'Nama': 'AULIA CITRA LESTARI',
-      'Judul': 'Klasifikasi Tingkat Kematangan Buah Kopi Menggunakan Support Vector Machine Berbasis Fitur Warna HSV',
-      'Jenis': 'Skripsi',
-      'Dosen Pembimbing': 'Dr. Marliana Budhiningtias, M.Si.',
-      'Dosen Reviewer': 'Taufiq Nurhadi, S.Kom., M.T.',
-      'Nilai Seminar': 89.0
-    }
-  ];
+export function downloadSampleTemplate(format: 'csv' | 'xlsx' = 'xlsx', activityType: 'seminar' | 'sidang' = 'sidang') {
+  const isSeminar = activityType === 'seminar';
+
+  const data = isSeminar
+    ? [
+        {
+          'NIM': '10120301',
+          'Nama': 'FARHAN KURNIAWAN',
+          'Judul': 'Sistem Rekomendasi Pemilihan Dosen Pembimbing Menggunakan Algoritma Content-Based Filtering',
+          'Jenis': 'Seminar Proposal',
+          'Dosen Pembimbing': 'Andri Heryandi, S.T., M.T.'
+        },
+        {
+          'NIM': '10120305',
+          'Nama': 'TIARA ANGGRAENI',
+          'Judul': 'Penerapan Algoritma YOLOv8 untuk Deteksi Rambu Lalu Lintas Secara Real-Time pada Kendaraan Otonom',
+          'Jenis': 'Seminar Proposal',
+          'Dosen Pembimbing': 'Chrismikha Hardyanto, M.Kom.'
+        },
+        {
+          'NIM': '10120310',
+          'Nama': 'RIZKY RAMADHAN',
+          'Judul': 'Pengembangan Aplikasi Pemantau Kualitas Udara IoT Berbasis ESP32 dan Dashboard Web',
+          'Jenis': 'Seminar Proposal',
+          'Dosen Pembimbing': 'Sopian Alviana, M.Kom.'
+        }
+      ]
+    : [
+        {
+          'NIM': '10120301',
+          'Nama': 'FARHAN KURNIAWAN',
+          'Judul': 'Sistem Rekomendasi Pemilihan Dosen Pembimbing Menggunakan Algoritma Content-Based Filtering',
+          'Jenis': 'Skripsi',
+          'Dosen Pembimbing': 'Andri Heryandi, S.T., M.T.',
+          'Dosen Reviewer': 'Dian Dharmayanti, S.T., M.Kom.',
+          'Nilai Seminar': 86.5
+        },
+        {
+          'NIM': '10120305',
+          'Nama': 'TIARA ANGGRAENI',
+          'Judul': 'Penerapan Algoritma YOLOv8 untuk Deteksi Rambu Lalu Lintas Secara Real-Time pada Kendaraan Otonom',
+          'Jenis': 'Skripsi',
+          'Dosen Pembimbing': 'Chrismikha Hardyanto, M.Kom.',
+          'Dosen Reviewer': 'Iskandar Ikbal, M.Kom.',
+          'Nilai Seminar': 88.0
+        },
+        {
+          'NIM': '10120310',
+          'Nama': 'RIZKY RAMADHAN',
+          'Judul': 'Pengembangan Aplikasi Pemantau Kualitas Udara IoT Berbasis ESP32 dan Dashboard Web',
+          'Jenis': 'Tugas Akhir',
+          'Dosen Pembimbing': 'Sopian Alviana, M.Kom.',
+          'Dosen Reviewer': 'Angga Setiyadi, M.Kom., CITPM',
+          'Nilai Seminar': 84.5
+        },
+        {
+          'NIM': '10120315',
+          'Nama': 'AULIA CITRA LESTARI',
+          'Judul': 'Klasifikasi Tingkat Kematangan Buah Kopi Menggunakan Support Vector Machine Berbasis Fitur Warna HSV',
+          'Jenis': 'Skripsi',
+          'Dosen Pembimbing': 'Dr. Marliana Budhiningtias, M.Si.',
+          'Dosen Reviewer': 'Taufiq Nurhadi, S.Kom., M.T.',
+          'Nilai Seminar': 89.0
+        }
+      ];
 
   const worksheet = XLSX.utils.json_to_sheet(data);
   const workbook = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(workbook, worksheet, 'Data Mahasiswa');
+  XLSX.utils.book_append_sheet(workbook, worksheet, isSeminar ? 'Pendaftaran Seminar' : 'Pengajuan Sidang');
+
+  const fileName = isSeminar
+    ? `Template_Impor_Pendaftaran_Seminar.${format}`
+    : `Template_Impor_Mahasiswa_Sidang.${format}`;
 
   if (format === 'xlsx') {
-    XLSX.writeFile(workbook, 'Template_Impor_Mahasiswa_Sidang.xlsx');
+    XLSX.writeFile(workbook, fileName);
   } else {
-    XLSX.writeFile(workbook, 'Template_Impor_Mahasiswa_Sidang.csv', { bookType: 'csv' });
+    XLSX.writeFile(workbook, fileName, { bookType: 'csv' });
   }
 }
 

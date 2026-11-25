@@ -128,16 +128,99 @@ CREATE INDEX IF NOT EXISTS idx_periode_tahun_sem ON periode_akademik(tahun_akade
 CREATE INDEX IF NOT EXISTS idx_periode_status ON periode_akademik(status);
 
 -- ----------------------------------------------------------------------------
--- 6. TABEL: pengajuan_sidang
+-- 6. TABEL: pendaftaran_seminar (Seminar Prerequisite Management - Aturan 2.1 & 2.2)
+-- Menyimpan pendaftaran seminar proposal/kemajuan mahasiswa
+-- Keputusan Aturan Bisnis: same_schedule
+-- Satu pendaftaran seminar mewadahi satu atau beberapa kali riwayat pelaksanaan
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS pendaftaran_seminar (
+    id VARCHAR(50) PRIMARY KEY,
+    mahasiswa_nim VARCHAR(20) NOT NULL,
+    periode_akademik_id VARCHAR(50) NOT NULL,
+    judul_penelitian TEXT NOT NULL,
+    jenis VARCHAR(50) NOT NULL DEFAULT 'Skripsi',
+    dosen_pembimbing_id VARCHAR(50) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'terdaftar',
+    status_kelulusan VARCHAR(20) NOT NULL DEFAULT 'belum_seminar',
+    pelaksanaan_terakhir_ke INTEGER NOT NULL DEFAULT 1,
+    nilai_akhir NUMERIC(5,2),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_seminar_mhs FOREIGN KEY (mahasiswa_nim)
+        REFERENCES mahasiswa(nim) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_seminar_periode FOREIGN KEY (periode_akademik_id)
+        REFERENCES periode_akademik(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_seminar_pembimbing FOREIGN KEY (dosen_pembimbing_id)
+        REFERENCES dosen(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT chk_seminar_status CHECK (status IN ('terdaftar', 'terjadwal', 'selesai', 'dibatalkan')),
+    CONSTRAINT chk_seminar_kelulusan CHECK (status_kelulusan IN ('belum_seminar', 'lulus', 'belum_lulus')),
+    CONSTRAINT chk_seminar_nilai CHECK (nilai_akhir IS NULL OR (nilai_akhir >= 0 AND nilai_akhir <= 100))
+);
+
+CREATE INDEX IF NOT EXISTS idx_seminar_nim ON pendaftaran_seminar(mahasiswa_nim);
+CREATE INDEX IF NOT EXISTS idx_seminar_periode ON pendaftaran_seminar(periode_akademik_id);
+CREATE INDEX IF NOT EXISTS idx_seminar_kelulusan ON pendaftaran_seminar(status_kelulusan);
+
+-- ----------------------------------------------------------------------------
+-- 7. TABEL: pelaksanaan_seminar (Riwayat Pelaksanaan Seminar - cross_period capable)
+-- Menampung pelaksanaan ke-1, ke-2, dst. tanpa menghapus hasil pelaksanaan sebelumnya
+-- Dosen Reviewer dipilih administrator pada Papan Jadwal (bukan dari impor)
+-- ----------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS pelaksanaan_seminar (
+    id VARCHAR(50) PRIMARY KEY,
+    pendaftaran_seminar_id VARCHAR(50) NOT NULL,
+    pelaksanaan_ke INTEGER NOT NULL DEFAULT 1,
+    periode_akademik_id VARCHAR(50) NOT NULL,
+    dosen_reviewer_id VARCHAR(50),
+    dosen_pembimbing_id VARCHAR(50) NOT NULL,
+    tanggal DATE,
+    slot_waktu_id VARCHAR(50),
+    ruangan_id VARCHAR(50),
+    status_pelaksanaan VARCHAR(20) NOT NULL DEFAULT 'unassigned',
+    hasil VARCHAR(20) NOT NULL DEFAULT 'belum_dinilai',
+    nilai NUMERIC(5,2),
+    catatan_revisi TEXT,
+    evaluated_at TIMESTAMP WITH TIME ZONE,
+    evaluated_by VARCHAR(50),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_pelaksanaan_pendaftaran FOREIGN KEY (pendaftaran_seminar_id)
+        REFERENCES pendaftaran_seminar(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_pelaksanaan_periode FOREIGN KEY (periode_akademik_id)
+        REFERENCES periode_akademik(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_pelaksanaan_reviewer FOREIGN KEY (dosen_reviewer_id)
+        REFERENCES dosen(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_pelaksanaan_pembimbing FOREIGN KEY (dosen_pembimbing_id)
+        REFERENCES dosen(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_pelaksanaan_slot FOREIGN KEY (slot_waktu_id)
+        REFERENCES slot_waktu(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_pelaksanaan_ruangan FOREIGN KEY (ruangan_id)
+        REFERENCES ruangan(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT uq_seminar_percobaan UNIQUE (pendaftaran_seminar_id, pelaksanaan_ke),
+    CONSTRAINT chk_pelaksanaan_status CHECK (status_pelaksanaan IN ('unassigned', 'scheduled', 'ongoing', 'completed', 'cancelled')),
+    CONSTRAINT chk_pelaksanaan_hasil CHECK (hasil IN ('belum_dinilai', 'lulus', 'belum_lulus')),
+    CONSTRAINT chk_seminar_reviewer_pembimbing CHECK (dosen_reviewer_id IS NULL OR dosen_reviewer_id <> dosen_pembimbing_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_pelaksanaan_pendaftaran ON pelaksanaan_seminar(pendaftaran_seminar_id);
+CREATE INDEX IF NOT EXISTS idx_pelaksanaan_reviewer ON pelaksanaan_seminar(dosen_reviewer_id);
+CREATE INDEX IF NOT EXISTS idx_pelaksanaan_hasil ON pelaksanaan_seminar(hasil);
+
+-- ----------------------------------------------------------------------------
+-- 8. TABEL: pengajuan_sidang
 -- Menyimpan usulan/draft skripsi mahasiswa beserta susunan 3 dosen penguji:
---  - Dosen Reviewer  -> Ketua Penguji (Penguji 1)
---  - Dosen Pembimbing -> Penguji 2
---  - Dosen Penguji 3 -> Ditentukan oleh admin / sistem
+--  - Dosen Reviewer  -> Ketua Penguji (Penguji 1 - Terkunci dari Seminar Lulus)
+--  - Dosen Pembimbing -> Penguji 2 (Terkunci dari Pembimbing Seminar)
+--  - Dosen Penguji 3 -> Ditentukan oleh admin pada Papan Jadwal
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS pengajuan_sidang (
     id VARCHAR(50) PRIMARY KEY,
     mahasiswa_nim VARCHAR(20) NOT NULL,
     periode_akademik_id VARCHAR(50) NOT NULL,
+    pendaftaran_seminar_id VARCHAR(50),
+    pelaksanaan_seminar_id VARCHAR(50),
     judul_skripsi TEXT NOT NULL,
     jenis VARCHAR(50) NOT NULL DEFAULT 'Skripsi',
     dosen_reviewer_id VARCHAR(50) NOT NULL,
@@ -154,6 +237,10 @@ CREATE TABLE IF NOT EXISTS pengajuan_sidang (
         REFERENCES mahasiswa(nim) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_pengajuan_periode FOREIGN KEY (periode_akademik_id)
         REFERENCES periode_akademik(id) ON UPDATE CASCADE ON DELETE RESTRICT,
+    CONSTRAINT fk_pengajuan_seminar FOREIGN KEY (pendaftaran_seminar_id)
+        REFERENCES pendaftaran_seminar(id) ON UPDATE CASCADE ON DELETE SET NULL,
+    CONSTRAINT fk_pengajuan_pelaksanaan_seminar FOREIGN KEY (pelaksanaan_seminar_id)
+        REFERENCES pelaksanaan_seminar(id) ON UPDATE CASCADE ON DELETE SET NULL,
     CONSTRAINT fk_pengajuan_reviewer FOREIGN KEY (dosen_reviewer_id)
         REFERENCES dosen(id) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_pengajuan_pembimbing FOREIGN KEY (dosen_pembimbing_id)
@@ -184,12 +271,15 @@ CREATE INDEX IF NOT EXISTS idx_pengajuan_pembimbing ON pengajuan_sidang(dosen_pe
 CREATE INDEX IF NOT EXISTS idx_pengajuan_penguji3 ON pengajuan_sidang(dosen_penguji3_id);
 
 -- ----------------------------------------------------------------------------
--- 7. TABEL: jadwal_sidang
--- Menyimpan penempatan sidang pada sel matriks (Ruangan x Slot Waktu x Tanggal)
+-- 9. TABEL: jadwal_sidang
+-- Menyimpan penempatan sidang atau seminar pada sel matriks (Ruangan x Slot Waktu x Tanggal)
+-- Mendukung Section 3: Satu Papan Jadwal Terintegrasi untuk Seminar dan Sidang
 -- ----------------------------------------------------------------------------
 CREATE TABLE IF NOT EXISTS jadwal_sidang (
     id VARCHAR(50) PRIMARY KEY,
-    pengajuan_id VARCHAR(50) NOT NULL UNIQUE,
+    jenis_kegiatan VARCHAR(20) NOT NULL DEFAULT 'sidang', -- 'seminar' | 'sidang'
+    pengajuan_id VARCHAR(50),                             -- Diisi jika sidang
+    pelaksanaan_seminar_id VARCHAR(50),                   -- Diisi jika seminar
     tanggal DATE NOT NULL,
     slot_waktu_id VARCHAR(50) NOT NULL,
     ruangan_id VARCHAR(50) NOT NULL,
@@ -200,15 +290,18 @@ CREATE TABLE IF NOT EXISTS jadwal_sidang (
     -- Foreign Keys
     CONSTRAINT fk_jadwal_pengajuan FOREIGN KEY (pengajuan_id)
         REFERENCES pengajuan_sidang(id) ON UPDATE CASCADE ON DELETE CASCADE,
+    CONSTRAINT fk_jadwal_pelaksanaan_seminar FOREIGN KEY (pelaksanaan_seminar_id)
+        REFERENCES pelaksanaan_seminar(id) ON UPDATE CASCADE ON DELETE CASCADE,
     CONSTRAINT fk_jadwal_slot FOREIGN KEY (slot_waktu_id)
         REFERENCES slot_waktu(id) ON UPDATE CASCADE ON DELETE RESTRICT,
     CONSTRAINT fk_jadwal_ruangan FOREIGN KEY (ruangan_id)
         REFERENCES ruangan(id) ON UPDATE CASCADE ON DELETE RESTRICT,
 
-    -- INTEGRITAS KRUSIAL: Mencegah 2 sidang menempati ruangan dan slot waktu yang sama di tanggal yang sama!
+    -- INTEGRITAS KRUSIAL: Mencegah 2 kegiatan (seminar/sidang) menempati ruangan dan slot waktu yang sama di tanggal yang sama!
     CONSTRAINT uq_jadwal_tanggal_slot_ruangan UNIQUE (tanggal, slot_waktu_id, ruangan_id),
 
-    -- Validasi status jadwal
+    -- Validasi status jadwal & jenis kegiatan
+    CONSTRAINT chk_jadwal_jenis CHECK (jenis_kegiatan IN ('seminar', 'sidang')),
     CONSTRAINT chk_jadwal_status CHECK (status IN ('scheduled', 'ongoing', 'completed', 'cancelled'))
 );
 

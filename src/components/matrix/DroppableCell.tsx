@@ -14,6 +14,8 @@ interface DroppableCellProps {
   /** Called when an empty cell is clicked (admin quick-schedule) */
   onClickEmpty?: (slotId: string, roomId: string) => void;
   onAssignExaminer3?: (item: ScheduleItem) => void;
+  onRecordSeminarResult?: (item: ScheduleItem) => void;
+  onViewSeminarHistory?: (item: ScheduleItem) => void;
 }
 
 export const DroppableCell: React.FC<DroppableCellProps> = ({
@@ -23,6 +25,8 @@ export const DroppableCell: React.FC<DroppableCellProps> = ({
   lecturers,
   onClickEmpty,
   onAssignExaminer3,
+  onRecordSeminarResult,
+  onViewSeminarHistory,
 }) => {
   const { activeDragItem, selectedDate, schedules, rooms } = useSchedule();
 
@@ -89,6 +93,8 @@ export const DroppableCell: React.FC<DroppableCellProps> = ({
             lecturers={lecturers}
             room={room}
             onAssignExaminer3={onAssignExaminer3}
+            onRecordSeminarResult={onRecordSeminarResult}
+            onViewSeminarHistory={onViewSeminarHistory}
           />
         </div>
       ) : (
@@ -99,61 +105,43 @@ export const DroppableCell: React.FC<DroppableCellProps> = ({
             <div className="flex flex-col items-center justify-center gap-1.5 animate-in fade-in zoom-in-95 duration-150">
               {isConflict ? (
                 <>
-                  <div className="w-8 h-8 rounded-full bg-rose-200 text-rose-700 flex items-center justify-center shadow-xs">
-                    <Lock className="w-4 h-4" />
+                  <div className="w-8 h-8 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center shadow-xs">
+                    <AlertOctagon className="w-4 h-4" />
                   </div>
-                  <span className="text-[11px] font-bold text-rose-800 tracking-tight">
-                    Bentrok Jadwal!
+                  <span className="text-[11px] font-bold text-rose-700 leading-tight">
+                    Bentrok Terdeteksi
                   </span>
-                  {isOver && liveValidation?.reasons[0] && (
-                    <p className="text-[10px] text-rose-700 font-medium leading-tight max-w-[170px] bg-white/90 p-1.5 rounded-md border border-rose-300 shadow-xs">
-                      {liveValidation.reasons[0]}
-                    </p>
-                  )}
+                  <span className="text-[10px] text-rose-600 max-w-[180px] line-clamp-2">
+                    {liveValidation?.reasons[0]}
+                  </span>
                 </>
               ) : (
                 <>
-                  <div className="w-8 h-8 rounded-full bg-emerald-200 text-emerald-700 flex items-center justify-center shadow-xs">
+                  <div className="w-8 h-8 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center shadow-xs animate-bounce">
                     <CheckCircle2 className="w-4 h-4" />
                   </div>
-                  <span className="text-[11px] font-bold text-emerald-800 tracking-tight">
+                  <span className="text-[11px] font-bold text-emerald-800">
                     Bebas Bentrok
                   </span>
-                  <span className="text-[10px] text-emerald-700 font-medium">
-                    {isOver ? 'Lepas di sini untuk pasang' : 'Tersedia'}
+                  <span className="text-[10px] text-emerald-700">
+                    Lepaskan di sini
                   </span>
                 </>
               )}
             </div>
           ) : (
-            /* Idle empty state: Show click-to-schedule hint */
-            <div className="flex flex-col items-center justify-center gap-2 text-slate-400 group-hover:text-indigo-500 transition-colors">
-              {/* Plus icon visible on hover */}
-              <div className="w-9 h-9 rounded-full border-2 border-dashed border-slate-200 group-hover:border-indigo-400 flex items-center justify-center transition-colors">
-                <Plus className="w-4 h-4 text-slate-300 group-hover:text-indigo-500 transition-colors" />
+            /* Idle Empty Cell: Click to schedule prompt */
+            <div className="flex flex-col items-center justify-center gap-1 text-slate-400 group-hover:text-indigo-600 transition-colors">
+              <div className="w-8 h-8 rounded-xl bg-slate-100 group-hover:bg-indigo-100 group-hover:text-indigo-600 flex items-center justify-center transition-all duration-150">
+                <Plus className="w-4 h-4" />
               </div>
-              <div className="space-y-0.5 text-center">
-                <span className="text-[11px] font-bold block text-slate-400 group-hover:text-indigo-600 transition-colors">
-                  Slot Tersedia
-                </span>
-                <span className="text-[10px] font-medium text-slate-300 group-hover:text-indigo-400 transition-colors flex items-center justify-center gap-1">
-                  <MousePointerClick className="w-3 h-3" />
-                  Klik atau seret ke sini
-                </span>
-              </div>
+              <span className="text-xs font-semibold">Slot Kosong</span>
+              <span className="text-[10px] text-slate-400 group-hover:text-indigo-500 flex items-center gap-0.5">
+                <MousePointerClick className="w-3 h-3" />
+                Klik untuk Jadwalkan
+              </span>
             </div>
           )}
-        </div>
-      )}
-
-      {/* Hover conflict tooltip overlay if hovering on an occupied slot that creates a conflict */}
-      {isOver && isConflict && item && (
-        <div className="absolute inset-0 bg-rose-950/85 backdrop-blur-xs rounded-xl p-3 flex flex-col items-center justify-center text-center text-white z-20 animate-in fade-in duration-150">
-          <AlertOctagon className="w-6 h-6 text-rose-400 mb-1" />
-          <span className="text-xs font-bold text-rose-200">Slot Penuh / Bentrok</span>
-          <p className="text-[10px] text-rose-100 mt-1 max-w-[190px] leading-tight">
-            {liveValidation?.reasons[0] || 'Ruangan ini sudah terisi jadwal lain'}
-          </p>
         </div>
       )}
     </div>

@@ -36,8 +36,9 @@ export function checkScheduleConflict(
   // 1. Check if the target room is already occupied
   const roomOccupant = concurrentSchedules.find(s => s.roomId === targetRoomId);
   if (roomOccupant) {
+    const occType = roomOccupant.activityType === 'seminar' ? 'Seminar' : 'Sidang';
     reasons.push(
-      `Ruangan ${targetRoomName} sudah terisi oleh ${roomOccupant.studentName} (${roomOccupant.nim}).`
+      `Ruangan ${targetRoomName} sudah terisi untuk ${occType} oleh ${roomOccupant.studentName} (${roomOccupant.nim}).`
     );
   }
 
@@ -54,28 +55,36 @@ export function checkScheduleConflict(
 
       if (isOccupiedAsP1 || isOccupiedAsP2 || isOccupiedAsP3) {
         const occRoom = roomMap.get(schedule.roomId || '')?.name || 'Ruangan lain';
-        const asRole = isOccupiedAsP1 ? 'Penguji 1' : isOccupiedAsP2 ? 'Penguji 2' : 'Penguji 3';
+        const asRole = isOccupiedAsP1
+          ? (schedule.activityType === 'seminar' ? 'Reviewer' : 'Ketua Penguji')
+          : isOccupiedAsP2
+          ? (schedule.activityType === 'seminar' ? 'Pembimbing' : 'Penguji 2')
+          : 'Penguji 3';
+        const occAct = schedule.activityType === 'seminar' ? 'Seminar' : 'Sidang';
         reasons.push(
-          `${roleTitle} (${lecturerName}) BENTROK: Sedang bertugas sebagai ${asRole} untuk ${schedule.studentName} di ruang ${occRoom}.`
+          `${roleTitle} (${lecturerName}) BENTROK: Sedang bertugas sebagai ${asRole} pada ${occAct} untuk ${schedule.studentName} di ruang ${occRoom}.`
         );
         break; // One conflict mention per examiner is enough
       }
     }
   };
 
-  // 2. Check Examiner 1
-  checkLecturerBusy(item.examiner1Id, 'Penguji 1');
+  // 2. Check Examiner 1 (Reviewer pada Seminar, Ketua Penguji pada Sidang)
+  checkLecturerBusy(item.examiner1Id, item.activityType === 'seminar' ? 'Dosen Reviewer' : 'Penguji 1');
 
-  // 3. Check Examiner 2
-  checkLecturerBusy(item.examiner2Id, 'Penguji 2');
+  // 3. Check Examiner 2 (Dosen Pembimbing)
+  checkLecturerBusy(item.examiner2Id, item.activityType === 'seminar' ? 'Dosen Pembimbing' : 'Penguji 2');
 
-  // 4. Check Examiner 3
-  checkLecturerBusy(item.examiner3Id, 'Penguji 3');
+  // 4. Check Examiner 3 (Hanya Sidang)
+  if (item.activityType !== 'seminar') {
+    checkLecturerBusy(item.examiner3Id, 'Penguji 3');
+  }
 
   // 5. Check if the student is already scheduled at this slot
   const studentDoubleBooked = concurrentSchedules.find(s => s.nim === item.nim);
   if (studentDoubleBooked) {
-    reasons.push(`Mahasiswa ${item.studentName} (${item.nim}) sudah terjadwal di ruangan lain pada slot waktu ini.`);
+    const doubleAct = studentDoubleBooked.activityType === 'seminar' ? 'Seminar' : 'Sidang';
+    reasons.push(`Mahasiswa ${item.studentName} (${item.nim}) sudah terjadwal untuk ${doubleAct} di ruangan lain pada slot waktu ini.`);
   }
 
   return {

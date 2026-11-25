@@ -13,8 +13,10 @@ import {
   JadwalSidangRecord,
   PenggunaRecord,
   PeriodeAkademikRecord,
+  PendaftaranSeminarRecord,
+  PelaksanaanSeminarRecord,
 } from './types';
-import { Lecturer, Room, TimeSlot, ScheduleItem, AcademicPeriod } from '../types';
+import { Lecturer, Room, TimeSlot, ScheduleItem, AcademicPeriod, SeminarHistoryItem } from '../types';
 
 export class ScheduleDatabaseRepository {
   /**
@@ -143,36 +145,47 @@ export class ScheduleDatabaseRepository {
   }
 
   /**
-   * Mengambil seluruh Jadwal Sidang (Join Relasional antara Mahasiswa, Pengajuan, dan Jadwal)
+   * Mengambil seluruh Jadwal Terpadu (Join Relasional Seminar dan Sidang)
+   * Mengimplementasikan Aturan Bisnis Section 3: Satu Papan Jadwal Terintegrasi
    */
   public async getScheduleItems(): Promise<ScheduleItem[]> {
     const mhs = await dbEngine.getAll<MahasiswaRecord>(STORES.MAHASISWA);
     const pengajuan = await dbEngine.getAll<PengajuanSidangRecord>(STORES.PENGAJUAN_SIDANG);
     const jadwal = await dbEngine.getAll<JadwalSidangRecord>(STORES.JADWAL_SIDANG);
     const dosen = await dbEngine.getAll<DosenRecord>(STORES.DOSEN);
+    const pendaftaranSem = await dbEngine.getAll<PendaftaranSeminarRecord>(STORES.PENDAFTARAN_SEMINAR);
+    const pelaksanaanSem = await dbEngine.getAll<PelaksanaanSeminarRecord>(STORES.PELAKSANAAN_SEMINAR);
+    const periode = await dbEngine.getAll<PeriodeAkademikRecord>(STORES.PERIODE_AKADEMIK);
 
     const mhsMap = new Map<string, MahasiswaRecord>(mhs.map((m) => [m.nim, m]));
     const jadwalMap = new Map<string, JadwalSidangRecord>(jadwal.map((j) => [j.pengajuan_id, j]));
     const dosenMap = new Map<string, DosenRecord>(dosen.map((d) => [d.id, d]));
+    const periodeMap = new Map<string, PeriodeAkademikRecord>(periode.map((p) => [p.id, p]));
 
-    return pengajuan.map((p) => {
+    const items: ScheduleItem[] = [];
+
+    // 1. Petakan Sidang Skripsi
+    pengajuan.forEach((p) => {
       const student = mhsMap.get(p.mahasiswa_nim);
       const jdw = jadwalMap.get(p.id);
       const rev = dosenMap.get(p.dosen_reviewer_id);
       const adv = dosenMap.get(p.dosen_pembimbing_id);
+      const prd = periodeMap.get(p.periode_akademik_id);
 
-      return {
+      items.push({
         id: p.id,
+        activityType: 'sidang',
         nim: p.mahasiswa_nim,
         studentName: student ? student.nama : p.mahasiswa_nim,
         studyProgram: student ? student.program_studi : 'Teknik Informatika',
-        academicYear: student ? student.tahun_akademik : '2024/2025',
+        academicYear: prd ? `${prd.tahun_akademik} ${prd.semester}` : (student ? student.tahun_akademik : '2025/2026 Genap'),
         academicPeriodId: p.periode_akademik_id,
         thesisTitle: p.judul_skripsi,
         thesisType: p.jenis,
         reviewerName: rev ? rev.nama : undefined,
         advisorName: adv ? adv.nama : undefined,
         seminarScore: p.nilai_seminar,
+        isSeminarPassed: true,
         examiner1Id: p.dosen_reviewer_id,
         examiner2Id: p.dosen_pembimbing_id,
         examiner3Id: p.dosen_penguji3_id || '',
@@ -181,8 +194,78 @@ export class ScheduleDatabaseRepository {
         roomId: jdw ? jdw.ruangan_id : null,
         status: (p.status === 'cancelled' ? 'unassigned' : p.status) as 'unassigned' | 'scheduled' | 'completed',
         notes: p.catatan,
-      };
+      });
     });
+
+    // 2. Petakan Seminar Proposal/Kemajuan (same_schedule & cross_period)
+    pendaftaranSem.forEach((reg) => {
+      const student = mhsMap.get(reg.mahasiswa_nim);
+      const adv = dosenMap.get(reg.dosen_pembimbing_id);
+
+      const executions = pelaksanaanSem
+        .filter((e) => e.pendaftaran_seminar_id === reg.id)
+        .sort((a, b) => a.pelaksanaan_ke - b.pelaksanaan_ke);
+
+      const latestExe = executions[executions.length - 1];
+      const previousExes = executions.slice(0, -1);
+
+      const rev = latestExe?.dosen_reviewer_id ? dosenMap.get(latestExe.dosen_reviewer_id) : undefined;
+      const exePrd = latestExe?.periode_akademik_id ? periodeMap.get(latestExe.periode_akademik_id) : undefined;
+
+      const seminarHistory: SeminarHistoryItem[] = previousExes.map((pe) => {
+        const peRev = pe.dosen_reviewer_id ? dosenMap.get(pe.dosen_reviewer_id) : undefined;
+        const peAdv = dosenMap.get(pe.dosen_pembimbing_id);
+        const pePrd = periodeMap.get(pe.periode_akademik_id);
+        return {
+          attemptNumber: pe.pelaksanaan_ke,
+          date: pe.tanggal || '-',
+          timeSlotId: pe.slot_waktu_id || null,
+          roomId: pe.ruangan_id || null,
+          reviewerId: pe.dosen_reviewer_id || '',
+          reviewerName: peRev ? peRev.nama : 'Belum Ditentukan',
+          advisorId: pe.dosen_pembimbing_id,
+          advisorName: peAdv ? peAdv.nama : '-',
+          score: pe.nilai,
+          result: pe.hasil,
+          feedback: pe.catatan_revisi,
+          evaluatedAt: pe.evaluated_at,
+          evaluatedBy: pe.evaluated_by,
+          academicPeriodId: pe.periode_akademik_id,
+          academicYear: pePrd ? `${pePrd.tahun_akademik} ${pePrd.semester}` : '-',
+        };
+      });
+
+      items.push({
+        id: `sem-${reg.id}`,
+        activityType: 'seminar',
+        seminarRegistrationId: reg.id,
+        attemptNumber: latestExe ? latestExe.pelaksanaan_ke : 1,
+        seminarStatus: reg.status,
+        seminarResult: latestExe ? latestExe.hasil : 'belum_dinilai',
+        seminarHistory,
+        isSeminarPassed: reg.status_kelulusan === 'lulus',
+        nim: reg.mahasiswa_nim,
+        studentName: student ? student.nama : reg.mahasiswa_nim,
+        studyProgram: student ? student.program_studi : 'Teknik Informatika',
+        academicYear: exePrd ? `${exePrd.tahun_akademik} ${exePrd.semester}` : (student ? student.tahun_akademik : '2025/2026 Genap'),
+        academicPeriodId: latestExe ? latestExe.periode_akademik_id : reg.periode_akademik_id,
+        thesisTitle: reg.judul_penelitian,
+        thesisType: reg.jenis,
+        reviewerName: rev ? rev.nama : undefined,
+        advisorName: adv ? adv.nama : undefined,
+        seminarScore: latestExe ? latestExe.nilai : reg.nilai_akhir,
+        examiner1Id: latestExe?.dosen_reviewer_id || '',
+        examiner2Id: reg.dosen_pembimbing_id,
+        examiner3Id: '',
+        date: latestExe?.tanggal || '2025-08-02',
+        timeSlotId: latestExe?.slot_waktu_id || null,
+        roomId: latestExe?.ruangan_id || null,
+        status: (latestExe?.status_pelaksanaan === 'cancelled' ? 'unassigned' : (latestExe?.status_pelaksanaan || 'unassigned')) as 'unassigned' | 'scheduled' | 'completed',
+        notes: latestExe?.catatan_revisi,
+      });
+    });
+
+    return items;
   }
 
   /**
@@ -412,6 +495,113 @@ export class ScheduleDatabaseRepository {
       tx.oncomplete = () => resolve();
       tx.onerror = () => reject(tx.error);
     });
+  }
+
+  // --------------------------------------------------------------------------
+  // Tata Kelola Seminar (Aturan Bisnis 2.1 - 2.4)
+  // --------------------------------------------------------------------------
+
+  /**
+   * Validasi kelayakan mengikuti Sidang (Syarat Wajib Sidang Lulus)
+   * Mengembalikan reviewer seminar dan pembimbing seminar untuk mengunci P1 dan P2
+   */
+  public async validateSidangEligibility(studentNim: string): Promise<{
+    eligible: boolean;
+    reason?: string;
+    reviewerId?: string;
+    reviewerName?: string;
+    advisorId?: string;
+    advisorName?: string;
+    seminarScore?: number;
+    pendaftaranId?: string;
+  }> {
+    const pendaftaran = await dbEngine.getAll<PendaftaranSeminarRecord>(STORES.PENDAFTARAN_SEMINAR);
+    const reg = pendaftaran.find((p) => p.mahasiswa_nim === studentNim);
+
+    if (!reg) {
+      return {
+        eligible: false,
+        reason: `Mahasiswa dengan NIM ${studentNim} belum memiliki pendaftaran Seminar. Seminar merupakan tahapan akademik wajib sebelum Sidang Skripsi.`,
+      };
+    }
+
+    if (reg.status_kelulusan !== 'lulus') {
+      return {
+        eligible: false,
+        reason: `Mahasiswa dengan NIM ${studentNim} belum dinyatakan Lulus Seminar (Status saat ini: ${reg.status_kelulusan === 'belum_lulus' ? 'Belum Lulus' : 'Belum Seminar'}). Hanya mahasiswa yang telah Lulus Seminar yang dapat dijadwalkan untuk Sidang Skripsi.`,
+      };
+    }
+
+    // Ambil detail reviewer dari pelaksanaan seminar yang lulus
+    const pelaksanaan = await dbEngine.getAll<PelaksanaanSeminarRecord>(STORES.PELAKSANAAN_SEMINAR);
+    const passedExe = pelaksanaan
+      .filter((e) => e.pendaftaran_seminar_id === reg.id && e.hasil === 'lulus')
+      .sort((a, b) => b.pelaksanaan_ke - a.pelaksanaan_ke)[0];
+
+    const dosenList = await dbEngine.getAll<DosenRecord>(STORES.DOSEN);
+    const dosenMap = new Map<string, DosenRecord>(dosenList.map((d) => [d.id, d]));
+
+    const rev = passedExe?.dosen_reviewer_id ? dosenMap.get(passedExe.dosen_reviewer_id) : undefined;
+    const adv = dosenMap.get(reg.dosen_pembimbing_id);
+
+    return {
+      eligible: true,
+      reviewerId: passedExe?.dosen_reviewer_id,
+      reviewerName: rev ? rev.nama : undefined,
+      advisorId: reg.dosen_pembimbing_id,
+      advisorName: adv ? adv.nama : undefined,
+      seminarScore: reg.nilai_akhir || passedExe?.nilai,
+      pendaftaranId: reg.id,
+    };
+  }
+
+  /**
+   * Menetapkan atau memperbarui Dosen Reviewer pada seminar
+   */
+  public async assignSeminarReviewer(seminarRegistrationId: string, reviewerId: string): Promise<void> {
+    const pelaksanaan = await dbEngine.getAll<PelaksanaanSeminarRecord>(STORES.PELAKSANAAN_SEMINAR);
+    const executions = pelaksanaan
+      .filter((e) => e.pendaftaran_seminar_id === seminarRegistrationId)
+      .sort((a, b) => a.pelaksanaan_ke - b.pelaksanaan_ke);
+
+    const latest = executions[executions.length - 1];
+    if (!latest) return;
+
+    await dbEngine.put(STORES.PELAKSANAAN_SEMINAR, {
+      ...latest,
+      dosen_reviewer_id: reviewerId,
+      updated_at: new Date().toISOString(),
+    });
+  }
+
+  /**
+   * Mencatat hasil seminar (Lulus vs Belum Lulus)
+   */
+  public async recordSeminarResult(
+    pendaftaranId: string,
+    result: 'lulus' | 'belum_lulus',
+    score?: number,
+    feedback?: string
+  ): Promise<{ success: boolean; error?: string }> {
+    const pelaksanaan = await dbEngine.getAll<PelaksanaanSeminarRecord>(STORES.PELAKSANAAN_SEMINAR);
+    const executions = pelaksanaan
+      .filter((e) => e.pendaftaran_seminar_id === pendaftaranId)
+      .sort((a, b) => a.pelaksanaan_ke - b.pelaksanaan_ke);
+
+    const latest = executions[executions.length - 1];
+    if (!latest) return { success: false, error: 'Pelaksanaan seminar tidak ditemukan' };
+
+    return await dbEngine.recordSeminarResultAtomic(pendaftaranId, latest.id, result, score, feedback);
+  }
+
+  /**
+   * Menjadwalkan ulang seminar yang belum lulus (same_schedule)
+   */
+  public async rescheduleSeminar(
+    pendaftaranId: string,
+    currentPeriodId: string
+  ): Promise<{ success: boolean; newAttemptNumber?: number; error?: string }> {
+    return await dbEngine.rescheduleSeminarAtomic(pendaftaranId, currentPeriodId);
   }
 }
 

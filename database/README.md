@@ -122,7 +122,24 @@ Fungsi trigger `trg_validasi_bentrok_jadwal()` dipicu otomatis sebelum setiap `I
 3. Memeriksa apakah **Dosen Penguji 3 (P3)** sudah memiliki jadwal sidang lain pada tanggal & slot waktu yang sama.
 4. Jika bentrok ditemukan, transaksi dibatalkan dengan pesan galat spesifik (`RAISE EXCEPTION`), sehingga data tidak konsisten tidak pernah tersimpan ke database.
 
-### E. Automatic Account Provisioning (Penyediaan Akun Otomatis)
+### E. Integrasi Seminar sebagai Prasyarat Wajib Sidang (Business Rules 2.1 - 2.4)
+Sistem menerapkan integrasi berantai antara **Seminar Skripsi/Proposal** dan **Sidang Akhir**:
+1. **Prasyarat Mutlak (`pendaftaran_seminar` & `pelaksanaan_seminar`)**:
+   - Mahasiswa wajib terdaftar seminar, melaksanakan seminar, dan memiliki status kelulusan `lulus`.
+   - Backend memvalidasi status kelulusan sebelum mahasiswa dapat dijadwalkan pada sidang skripsi.
+2. **Aturan Penjadwalan Ulang Seminar (`same_schedule`)**:
+   - Mahasiswa yang belum lulus seminar dapat dijadwalkan ulang menggunakan nomor pendaftaran seminar yang sama (tanpa membuat pendaftaran baru).
+   - Seluruh riwayat percobaan (`pelaksanaan_ke` 1, 2, dst.) tersimpan permanen dan tidak boleh ditimpa atau dihapus.
+3. **Pemisahan Periode Akademik (`cross_period`)**:
+   - Pelaksanaan seminar dan sidang dapat berlangsung pada periode akademik yang berbeda (misalnya: Seminar Lulus di 2025/2026 Genap, Sidang dilaksanakan di 2026/2027 Ganjil). Kelulusan seminar tetap sah tanpa perlu mengulang seminar saat periode aktif berganti.
+4. **Penetapan Penguji Berantai**:
+   - **Seminar**: Memerlukan 2 dosen (Dosen Pembimbing dari pendaftaran & Dosen Reviewer yang dipilih Administrator di Papan Jadwal).
+   - **Sidang**: Memerlukan 3 dosen:
+     - **P1 (Ketua Penguji)**: Terkunci otomatis dari Reviewer Seminar yang telah dinyatakan sah/lulus.
+     - **P2 (Penguji 2)**: Terkunci otomatis ke Dosen Pembimbing Seminar.
+     - **P3 (Penguji 3)**: Ditentukan oleh Administrator pada Papan Jadwal.
+
+### F. Automatic Account Provisioning (Penyediaan Akun Otomatis)
 Sistem menerapkan **Full Automatic Account Provisioning** baik pada level aplikasi frontend/klien maupun pada level basis data relasional PostgreSQL:
 1. **Trigger Dosen (`trg_auto_provision_dosen`)**:
    - Setiap kali data dosen baru dimasukkan ke tabel `dosen`, sistem secara otomatis membuatkan entitas akun pengguna di tabel `pengguna`.

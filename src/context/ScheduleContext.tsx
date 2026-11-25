@@ -7,7 +7,8 @@ import {
   Lecturer, 
   ConflictCheckResult,
   ImportedStudentRow,
-  AcademicPeriod
+  AcademicPeriod,
+  SeminarHistoryItem
 } from '../types';
 import { 
   INITIAL_ROOMS, 
@@ -111,6 +112,24 @@ interface ScheduleContextType {
   // Dynamic Dates with Matrix Agenda
   scheduledDates: string[];
   matrixCardCountsByDate: Record<string, number>;
+
+  // Activity Type Filter (Seminar vs Sidang Integrated Board)
+  activityTypeFilter: 'all' | 'seminar' | 'sidang';
+  setActivityTypeFilter: (filter: 'all' | 'seminar' | 'sidang') => void;
+
+  // Seminar Operations (Business Rules 2.1 - 2.4)
+  assignSeminarReviewer: (itemId: string, reviewerId: string) => void;
+  recordSeminarResult: (itemId: string, result: 'lulus' | 'belum_lulus', score?: number, feedback?: string) => { success: boolean; error?: string };
+  rescheduleSeminar: (itemId: string) => { success: boolean; error?: string };
+  validateSidangEligibility: (studentNim: string) => { 
+    eligible: boolean; 
+    reason?: string; 
+    reviewerId?: string; 
+    reviewerName?: string; 
+    advisorId?: string; 
+    advisorName?: string; 
+    seminarScore?: number;
+  };
 
   // Toasts
   toasts: Toast[];
@@ -243,6 +262,9 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
     return INITIAL_SCHEDULE_ITEMS;
   });
+
+  // Activity Type Filter (Semua Kegiatan | Seminar | Sidang)
+  const [activityTypeFilter, setActivityTypeFilter] = useState<'all' | 'seminar' | 'sidang'>('all');
 
   // Drag and Drop active states
   const [activeDragItem, setActiveDragItem] = useState<ScheduleItem | null>(null);
@@ -954,7 +976,230 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return assignedCount;
   }, [lecturers, addToast]);
 
-  // Assign or move a schedule to a slot
+  // --------------------------------------------------------------------------
+  // Tata Kelola Seminar & Validasi Kelayakan Sidang (Aturan Bisnis 2.1 - 2.4)
+  // --------------------------------------------------------------------------
+
+  // Validasi kelayakan Sidang (Prasyarat Wajib: Lulus Seminar)
+  const validateSidangEligibility = useCallback((studentNim: string) => {
+    const cleanNim = studentNim.trim();
+
+    // 1. Cek di daftar schedules apakah mahasiswa memiliki data kelulusan seminar yang sah
+    const seminarItems = schedules.filter(
+      s => s.nim.trim() === cleanNim && s.activityType === 'seminar'
+    );
+
+    const passedSeminar = seminarItems.find(
+      s => s.isSeminarPassed || s.seminarResult === 'lulus' || (s.status === 'completed' && s.seminarResult !== 'belum_lulus')
+    );
+
+    // Cek juga pada sidang existing (yang sudah sah lulus seminar)
+    const existingSidang = schedules.find(
+      s => s.nim.trim() === cleanNim && s.activityType === 'sidang' && s.isSeminarPassed
+    );
+
+    if (passedSeminar) {
+      const rev = lecturers.find(l => l.id === passedSeminar.examiner1Id);
+      const adv = lecturers.find(l => l.id === passedSeminar.examiner2Id);
+      return {
+        eligible: true,
+        reviewerId: passedSeminar.examiner1Id,
+        reviewerName: rev?.name || passedSeminar.reviewerName,
+        advisorId: passedSeminar.examiner2Id,
+        advisorName: adv?.name || passedSeminar.advisorName,
+        seminarScore: typeof passedSeminar.seminarScore === 'number' ? passedSeminar.seminarScore : undefined,
+      };
+    }
+
+    if (existingSidang) {
+      const rev = lecturers.find(l => l.id === existingSidang.examiner1Id);
+      const adv = lecturers.find(l => l.id === existingSidang.examiner2Id);
+      return {
+        eligible: true,
+        reviewerId: existingSidang.examiner1Id,
+        reviewerName: rev?.name || existingSidang.reviewerName,
+        advisorId: existingSidang.examiner2Id,
+        advisorName: adv?.name || existingSidang.advisorName,
+        seminarScore: typeof existingSidang.seminarScore === 'number' ? existingSidang.seminarScore : undefined,
+      };
+    }
+
+    if (seminarItems.length > 0) {
+      const latest = seminarItems[0];
+      return {
+        eligible: false,
+        reason: `Mahasiswa ${latest.studentName} (${cleanNim}) belum lulus Seminar (Status: ${latest.seminarResult === 'belum_lulus' ? 'Belum Lulus' : 'Belum Melaksanakan Seminar'}). Selesaikan dan luluskan Seminar terlebih dahulu sebelum dapat dijadwalkan Sidang.`,
+      };
+    }
+
+    return {
+      eligible: false,
+      reason: `Mahasiswa dengan NIM ${cleanNim} belum memiliki pendaftaran Seminar Proposal/Kemajuan. Sesuai aturan akademik SIM SKRIPSI, tahapan Seminar wajib diselesaikan dan dinyatakan Lulus sebelum pendaftaran Sidang Skripsi.`,
+    };
+  }, [schedules, lecturers]);
+
+  // Menetapkan Dosen Reviewer Seminar (Dipilih Admin di Papan Jadwal - Aturan 2.4)
+  const assignSeminarReviewer = useCallback((itemId: string, reviewerId: string) => {
+    const item = schedules.find(s => s.id === itemId);
+    if (!item) return;
+
+    if (item.examiner2Id && item.examiner2Id === reviewerId) {
+      addToast('error', 'Reviewer Tidak Valid', 'Dosen Reviewer tidak boleh sama dengan Dosen Pembimbing.');
+      return;
+    }
+
+    const revLecturer = lecturers.find(l => l.id === reviewerId);
+    setSchedules(prev => prev.map(s => {
+      if (s.id === itemId) {
+        return {
+          ...s,
+          examiner1Id: reviewerId,
+          reviewerName: revLecturer?.name,
+        };
+      }
+      return s;
+    }));
+
+    if (item.seminarRegistrationId) {
+      dbRepository.assignSeminarReviewer(item.seminarRegistrationId, reviewerId).catch(err => {
+        console.warn('DB assignSeminarReviewer error', err);
+      });
+    }
+
+    addToast(
+      'success',
+      'Dosen Reviewer Ditetapkan',
+      `${revLecturer?.name || 'Dosen'} resmi ditetapkan sebagai Reviewer Seminar untuk ${item.studentName}.`
+    );
+  }, [schedules, lecturers, addToast]);
+
+  // Mencatat Hasil Pelaksanaan Seminar (Lulus vs Belum Lulus)
+  const recordSeminarResult = useCallback((
+    itemId: string,
+    result: 'lulus' | 'belum_lulus',
+    score?: number,
+    feedback?: string
+  ): { success: boolean; error?: string } => {
+    const item = schedules.find(s => s.id === itemId);
+    if (!item) return { success: false, error: 'Data seminar tidak ditemukan.' };
+
+    const isLulus = result === 'lulus';
+
+    setSchedules(prev => prev.map(s => {
+      if (s.id === itemId) {
+        return {
+          ...s,
+          seminarResult: result,
+          isSeminarPassed: isLulus,
+          seminarScore: score !== undefined ? score : s.seminarScore,
+          status: isLulus ? 'completed' : 'unassigned',
+          seminarStatus: isLulus ? 'selesai' : 'terdaftar',
+          notes: feedback || s.notes,
+        };
+      }
+      return s;
+    }));
+
+    if (item.seminarRegistrationId) {
+      dbRepository.recordSeminarResult(item.seminarRegistrationId, result, score, feedback).catch(err => {
+        console.warn('DB recordSeminarResult error', err);
+      });
+    }
+
+    if (isLulus) {
+      addToast(
+        'success',
+        'Seminar Dinyatakan LULUS!',
+        `Mahasiswa ${item.studentName} (${item.nim}) resmi Lulus Seminar dengan nilai ${score ?? '-'}. Mahasiswa kini memenuhi syarat untuk Sidang Skripsi.`
+      );
+      try {
+        confetti({
+          particleCount: 40,
+          spread: 60,
+          origin: { y: 0.7 },
+          colors: ['#10b981', '#34d399', '#059669'],
+        });
+      } catch {
+        // ignore
+      }
+    } else {
+      addToast(
+        'warning',
+        'Seminar Belum Lulus',
+        `Hasil seminar ${item.studentName} dicatat "Belum Lulus". Mahasiswa dapat dijadwalkan ulang untuk seminar kembali melalui tombol Jadwalkan Ulang.`
+      );
+    }
+
+    return { success: true };
+  }, [schedules, addToast]);
+
+  // Menjadwalkan Ulang Seminar yang Belum Lulus (Aturan 2.2: same_schedule)
+  const rescheduleSeminar = useCallback((itemId: string): { success: boolean; error?: string } => {
+    const item = schedules.find(s => s.id === itemId);
+    if (!item) return { success: false, error: 'Data seminar tidak ditemukan.' };
+
+    const currentAttempt = item.attemptNumber || 1;
+    const nextAttempt = currentAttempt + 1;
+
+    // Simpan catatan pelaksanaan sebelumnya ke seminarHistory (Aturan Bisnis 2.2: same_schedule)
+    const rev = lecturers.find(l => l.id === item.examiner1Id);
+    const adv = lecturers.find(l => l.id === item.examiner2Id);
+    const periodObj = academicPeriods.find(p => p.id === item.academicPeriodId) || activePeriod;
+
+    const historyEntry: SeminarHistoryItem = {
+      attemptNumber: currentAttempt,
+      date: item.date || '-',
+      timeSlotId: item.timeSlotId,
+      roomId: item.roomId,
+      reviewerId: item.examiner1Id,
+      reviewerName: rev?.name || item.reviewerName || 'Belum Ditentukan',
+      advisorId: item.examiner2Id,
+      advisorName: adv?.name || item.advisorName || '-',
+      score: typeof item.seminarScore === 'number' ? item.seminarScore : undefined,
+      result: item.seminarResult || 'belum_lulus',
+      feedback: item.notes,
+      evaluatedAt: new Date().toISOString(),
+      evaluatedBy: rev?.name || 'Dosen Reviewer',
+      academicPeriodId: item.academicPeriodId || activePeriod?.id || '',
+      academicYear: periodObj ? `${periodObj.academicYear} ${periodObj.semester}` : '2025/2026 Genap',
+    };
+
+    const updatedHistory = [...(item.seminarHistory || []), historyEntry];
+
+    setSchedules(prev => prev.map(s => {
+      if (s.id === itemId) {
+        return {
+          ...s,
+          attemptNumber: nextAttempt,
+          status: 'unassigned',
+          seminarStatus: 'terdaftar',
+          seminarResult: 'belum_dinilai',
+          isSeminarPassed: false,
+          timeSlotId: null,
+          roomId: null,
+          seminarHistory: updatedHistory,
+          notes: `Penjadwalan ulang seminar (Percobaan ke-${nextAttempt}).`,
+        };
+      }
+      return s;
+    }));
+
+    if (item.seminarRegistrationId) {
+      dbRepository.rescheduleSeminar(item.seminarRegistrationId, activePeriod?.id || 'prd-2025-genap').catch(err => {
+        console.warn('DB rescheduleSeminar error', err);
+      });
+    }
+
+    addToast(
+      'info',
+      'Seminar Dijadwalkan Ulang',
+      `Seminar ${item.studentName} masuk ke antrean untuk Pelaksanaan ke-${nextAttempt}. Riwayat pelaksanaan ke-${currentAttempt} tersimpan utuh.`
+    );
+
+    return { success: true };
+  }, [schedules, lecturers, academicPeriods, activePeriod, addToast]);
+
+  // Assign or move a schedule to a slot (Mendukung Seminar dan Sidang)
   const assignSchedule = useCallback((
     itemId: string, 
     targetDate: string, 
@@ -963,60 +1208,100 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   ): { success: boolean; reasons?: string[] } => {
     const item = schedules.find(s => s.id === itemId);
     if (!item) {
-      return { success: false, reasons: ['Data pengajuan sidang tidak ditemukan.'] };
+      return { success: false, reasons: ['Data kegiatan tidak ditemukan.'] };
     }
 
-    // Integritas: Sidang yang telah berstatus Selesai terkunci permanen
+    // Integritas: Kegiatan yang telah berstatus Selesai terkunci permanen
     if (item.status === 'completed') {
       addToast(
         'error',
-        'Sidang Telah Selesai',
-        'Data sidang ini telah dinyatakan selesai dan tersimpan permanen di database. Jadwal tidak dapat dipindahkan.'
+        'Kegiatan Telah Selesai',
+        'Data kegiatan ini telah dinyatakan selesai dan tersimpan permanen di database. Jadwal tidak dapat dipindahkan.'
       );
-      return { success: false, reasons: ['Sidang berstatus selesai dan terkunci permanen.'] };
+      return { success: false, reasons: ['Kegiatan berstatus selesai dan terkunci permanen.'] };
     }
 
-    // Integritas: Periksa status periode akademik sidang
+    // Integritas: Periksa status periode akademik kegiatan
     if (item.academicPeriodId) {
       const p = academicPeriods.find(per => per.id === item.academicPeriodId);
       if (p && p.status === 'selesai') {
         addToast(
           'error',
           'Periode Akademik Selesai',
-          `Sidang ini terdaftar pada periode ${p.academicYear} ${p.semester} yang telah berstatus Selesai (Arsip). Penjadwalan baru dinonaktifkan.`
+          `Kegiatan ini terdaftar pada periode ${p.academicYear} ${p.semester} yang telah berstatus Selesai (Arsip). Penjadwalan baru dinonaktifkan.`
         );
-        return { success: false, reasons: ['Periode akademik sidang ini telah berstatus Selesai (Arsip).'] };
+        return { success: false, reasons: ['Periode akademik kegiatan ini telah berstatus Selesai (Arsip).'] };
       }
     }
 
-    // Check if Examiner 3 is set; if not, try to pick an available one
-    let resolvedExaminer3Id = item.examiner3Id;
-    if (!resolvedExaminer3Id) {
-      const candidates = getEligibleExaminer3Candidates(
-        item.examiner2Id,
-        item.examiner1Id,
-        lecturers,
-        schedules,
-        targetDate,
-        timeSlotId,
-        rooms
-      );
-      const available = candidates.find(c => c.isAvailable);
-      if (available) {
-        resolvedExaminer3Id = available.lecturer.id;
-      } else {
+    let resolvedExaminer3Id = '';
+
+    // ATURAN SPESIFIK KEGIATAN:
+    if (item.activityType === 'seminar') {
+      // 1. Dosen Reviewer wajib dipilih oleh administrator (Aturan 2.4)
+      if (!item.examiner1Id || item.examiner1Id.trim() === '') {
         addToast(
           'error',
-          'Penguji 3 Belum Tersedia',
-          'Silakan tentukan Dosen Penguji 3 terlebih dahulu untuk mahasiswa ini.'
+          'Reviewer Belum Ditentukan',
+          'Dosen Reviewer wajib dipilih oleh administrator sebelum seminar dapat dijadwalkan ke matriks.'
         );
-        return { success: false, reasons: ['Dosen Penguji 3 belum ditentukan dan tidak ada kandidat kosong pada slot ini.'] };
+        return { success: false, reasons: ['Dosen Reviewer wajib dipilih oleh administrator sebelum seminar dijadwalkan.'] };
+      }
+
+      // 2. Dosen Reviewer tidak boleh sama dengan Dosen Pembimbing
+      if (item.examiner1Id === item.examiner2Id) {
+        addToast(
+          'error',
+          'Bentrok Dosen Reviewer',
+          'Dosen Reviewer tidak boleh sama dengan Dosen Pembimbing.'
+        );
+        return { success: false, reasons: ['Dosen Reviewer tidak boleh sama dengan Dosen Pembimbing.'] };
+      }
+    } else {
+      // KEGIATAN SIDANG:
+      // Validasi Prasyarat Kelayakan Sidang (Aturan 2.1)
+      const eligibility = validateSidangEligibility(item.nim);
+      if (!eligibility.eligible && !item.isSeminarPassed) {
+        addToast(
+          'error',
+          'Prasyarat Sidang Belum Terpenuhi',
+          eligibility.reason || 'Mahasiswa belum lulus Seminar.'
+        );
+        return { success: false, reasons: [eligibility.reason || 'Mahasiswa belum dinyatakan Lulus Seminar.'] };
+      }
+
+      // Check if Examiner 3 is set; if not, try to pick an available one
+      resolvedExaminer3Id = item.examiner3Id;
+      if (!resolvedExaminer3Id) {
+        const candidates = getEligibleExaminer3Candidates(
+          item.examiner2Id,
+          item.examiner1Id,
+          lecturers,
+          schedules,
+          targetDate,
+          timeSlotId,
+          rooms
+        );
+        const available = candidates.find(c => c.isAvailable);
+        if (available) {
+          resolvedExaminer3Id = available.lecturer.id;
+        } else {
+          addToast(
+            'error',
+            'Penguji 3 Belum Tersedia',
+            'Silakan tentukan Dosen Penguji 3 terlebih dahulu untuk mahasiswa ini.'
+          );
+          return { success: false, reasons: ['Dosen Penguji 3 belum ditentukan dan tidak ada kandidat kosong pada slot ini.'] };
+        }
       }
     }
 
-    const testItem = { ...item, examiner3Id: resolvedExaminer3Id };
+    const testItem = { 
+      ...item, 
+      examiner3Id: item.activityType === 'seminar' ? '' : resolvedExaminer3Id 
+    };
 
-    // Check conflict
+    // Check conflict (lintas kegiatan Seminar dan Sidang)
     const validation = checkScheduleConflict(
       testItem,
       targetDate,
@@ -1041,11 +1326,12 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       if (s.id === itemId) {
         return {
           ...s,
-          examiner3Id: resolvedExaminer3Id,
+          examiner3Id: s.activityType === 'seminar' ? '' : resolvedExaminer3Id,
           date: targetDate,
           timeSlotId,
           roomId,
           status: 'scheduled',
+          seminarStatus: s.activityType === 'seminar' ? 'terjadwal' : s.seminarStatus,
         };
       }
       return s;
@@ -1059,9 +1345,10 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.warn('DB async assign error', err);
     });
 
+    const actTitle = item.activityType === 'seminar' ? 'Jadwal Seminar Ditetapkan!' : 'Jadwal Sidang Berhasil Ditetapkan!';
     addToast(
       'success',
-      'Jadwal Berhasil Ditetapkan!',
+      actTitle,
       `${item.studentName} ditempatkan di ${roomName} (${slotLabel}).`
     );
 
@@ -1071,14 +1358,14 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         particleCount: 35,
         spread: 60,
         origin: { y: 0.8 },
-        colors: ['#4f46e5', '#10b981', '#3b82f6', '#f59e0b']
+        colors: item.activityType === 'seminar' ? ['#059669', '#10b981', '#34d399', '#6ee7b7'] : ['#4f46e5', '#10b981', '#3b82f6', '#f59e0b']
       });
     } catch {
       // ignore
     }
 
     return { success: true };
-  }, [schedules, lecturers, rooms, timeSlots, addToast]);
+  }, [schedules, academicPeriods, validateSidangEligibility, lecturers, rooms, timeSlots, addToast]);
 
   // Unassign from grid back to queue
   const unassignSchedule = useCallback((itemId: string) => {
@@ -1137,6 +1424,21 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const addNewStudentToQueue = useCallback((
     student: Omit<ScheduleItem, 'id' | 'status' | 'timeSlotId' | 'roomId'>
   ) => {
+    const isSidang = student.activityType === 'sidang' || !student.activityType;
+
+    // Validasi Prasyarat Kelayakan Sidang (Aturan 2.1)
+    if (isSidang && !student.isSeminarPassed) {
+      const eligibility = validateSidangEligibility(student.nim);
+      if (!eligibility.eligible) {
+        addToast(
+          'error',
+          'Pendaftaran Sidang Ditolak',
+          eligibility.reason || 'Mahasiswa belum dinyatakan Lulus Seminar. Seminar merupakan tahapan wajib sebelum Sidang Skripsi.'
+        );
+        return;
+      }
+    }
+
     const targetPeriodId = student.academicPeriodId || activePeriod?.id || '';
     const periodObj = academicPeriods.find(p => p.id === targetPeriodId);
 
@@ -1151,13 +1453,15 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     if (targetPeriodId) {
       const isDuplicate = schedules.some(
-        s => s.nim.trim() === student.nim.trim() && (s.academicPeriodId === targetPeriodId || (!s.academicPeriodId && activePeriod?.id === targetPeriodId))
+        s => s.nim.trim() === student.nim.trim() && 
+             (s.activityType || 'sidang') === (student.activityType || 'sidang') &&
+             (s.academicPeriodId === targetPeriodId || (!s.academicPeriodId && activePeriod?.id === targetPeriodId))
       );
       if (isDuplicate) {
         addToast(
           'error',
           'Mahasiswa Sudah Terdaftar',
-          `Mahasiswa dengan NIM ${student.nim} sudah terdaftar pada periode akademik ini.`
+          `Mahasiswa dengan NIM ${student.nim} sudah terdaftar pada kegiatan ${student.activityType === 'seminar' ? 'Seminar' : 'Sidang'} periode ini.`
         );
         return;
       }
@@ -1165,11 +1469,18 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
 
     const newItem: ScheduleItem = {
       ...student,
-      id: `sch-${Date.now()}`,
+      id: `${student.activityType === 'seminar' ? 'sem' : 'sch'}-${Date.now()}`,
+      activityType: student.activityType || 'sidang',
       academicPeriodId: targetPeriodId,
       academicYear: periodObj ? `${periodObj.academicYear} ${periodObj.semester}` : (student.academicYear || '2025/2026 Genap'),
-      examiner3Id: '', // Ditentukan hanya saat penjadwalan
+      examiner1Id: student.examiner1Id || '',
+      examiner2Id: student.examiner2Id || '',
+      examiner3Id: student.activityType === 'seminar' ? '' : (student.examiner3Id || ''),
       status: 'unassigned',
+      seminarStatus: student.activityType === 'seminar' ? 'terdaftar' : undefined,
+      seminarResult: student.activityType === 'seminar' ? 'belum_dinilai' : undefined,
+      attemptNumber: student.activityType === 'seminar' ? (student.attemptNumber || 1) : undefined,
+      isSeminarPassed: student.activityType === 'seminar' ? false : (student.isSeminarPassed ?? true),
       timeSlotId: null,
       roomId: null,
     };
@@ -1187,11 +1498,12 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       });
     }
 
-    addToast('success', 'Mahasiswa Ditambahkan', `${student.studentName} berhasil masuk ke antrean periode ${newItem.academicYear}. Akun login otomatis dibuat.`);
-  }, [activePeriod, academicPeriods, schedules, addToast]);
+    const activityName = newItem.activityType === 'seminar' ? 'Seminar' : 'Sidang';
+    addToast('success', `Peserta ${activityName} Ditambahkan`, `${student.studentName} berhasil masuk ke antrean ${activityName} periode ${newItem.academicYear}. Akun login otomatis dibuat.`);
+  }, [activePeriod, academicPeriods, schedules, validateSidangEligibility, addToast]);
 
   // Import students from Excel/CSV parsed data
-  // Aturan: Impor data mahasiswa TIDAK ADA proses penentuan penguji 3.
+  // Aturan 2.4: Impor Seminar tidak mewajibkan reviewer dan reviewer tidak boleh otomatis diisi dari impor.
   const importStudentsFromData = useCallback((importedRows: ImportedStudentRow[], defaultDate?: string) => {
     if (!activePeriod) {
       addToast(
@@ -1206,7 +1518,7 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       addToast(
         'error',
         'Impor Ditolak: Periode Tidak Berjalan',
-        `Periode aktif saat ini (${activePeriod.academicYear} ${activePeriod.semester}) berstatus "${activePeriod.status}". Impor sidang baru hanya dapat dilakukan pada periode yang berstatus "Berjalan".`
+        `Periode aktif saat ini (${activePeriod.academicYear} ${activePeriod.semester}) berstatus "${activePeriod.status}". Impor kegiatan baru hanya dapat dilakukan pada periode yang berstatus "Berjalan".`
       );
       return { successCount: 0, duplicateCount: 0, failedCount: importedRows.length, error: `Periode aktif berstatus ${activePeriod.status}.` };
     }
@@ -1216,11 +1528,10 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let failedCount = 0;
     const newItems: ScheduleItem[] = [];
 
-    // Existing NIMs in the active period
     const existingNimsInPeriod = new Set(
       schedules
         .filter(s => s.academicPeriodId === activePeriod.id || (!s.academicPeriodId && activePeriod.isActive))
-        .map(s => s.nim.trim())
+        .map(s => `${s.nim.trim()}_${s.activityType || 'sidang'}`)
     );
 
     const seenBatchNims = new Set<string>();
@@ -1232,41 +1543,78 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }
 
       const cleanNim = row.nim.trim();
+      const isSeminar = row.activityType === 'seminar';
+      const dedupeKey = `${cleanNim}_${isSeminar ? 'seminar' : 'sidang'}`;
 
-      if (existingNimsInPeriod.has(cleanNim) || seenBatchNims.has(cleanNim)) {
+      if (existingNimsInPeriod.has(dedupeKey) || seenBatchNims.has(dedupeKey)) {
         duplicateCount++;
         continue;
       }
 
-      seenBatchNims.add(cleanNim);
+      seenBatchNims.add(dedupeKey);
 
-      const reviewerId = row.matchedReviewerId || lecturers[0]?.id || 'lec-1';
       const advisorId = row.matchedAdvisorId || lecturers[1]?.id || 'lec-2';
 
-      const item: ScheduleItem = {
-        id: `sch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
-        nim: cleanNim,
-        studentName: row.nama,
-        thesisTitle: row.judul,
-        thesisType: row.jenis || 'Skripsi',
-        studyProgram: 'Teknik Informatika',
-        academicYear: `${activePeriod.academicYear} ${activePeriod.semester}`,
-        academicPeriodId: activePeriod.id,
-        reviewerName: row.dosenReviewer,
-        advisorName: row.dosenPembimbing,
-        seminarScore: row.nilaiSeminar,
-        examiner1Id: reviewerId,
-        examiner2Id: advisorId,
-        examiner3Id: '', // Tanpa penentuan Penguji 3 saat impor
-        date: defaultDate || selectedDate,
-        timeSlotId: null,
-        roomId: null,
-        status: 'unassigned',
-        notes: `Impor Excel/CSV TA: ${activePeriod.academicYear} (${activePeriod.semester}). Nilai Seminar: ${row.nilaiSeminar}`,
-      };
-
-      newItems.push(item);
-      successCount++;
+      if (isSeminar) {
+        // Aturan 2.4: Reviewer TIDAK boleh ditentukan otomatis dari file impor Seminar!
+        // Reviewer dipilih oleh Administrator pada Papan Jadwal.
+        const item: ScheduleItem = {
+          id: `sem-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          activityType: 'seminar',
+          nim: cleanNim,
+          studentName: row.nama,
+          thesisTitle: row.judul,
+          thesisType: row.jenis || 'Skripsi',
+          studyProgram: 'Teknik Informatika',
+          academicYear: `${activePeriod.academicYear} ${activePeriod.semester}`,
+          academicPeriodId: activePeriod.id,
+          reviewerName: undefined, // Dikosongkan sesuai aturan bisnis
+          advisorName: row.dosenPembimbing,
+          seminarScore: undefined,
+          examiner1Id: '',         // Reviewer wajib dipilih admin di Papan Jadwal
+          examiner2Id: advisorId,  // Pembimbing Seminar
+          examiner3Id: '',         // Seminar tidak memiliki Penguji 3
+          date: defaultDate || selectedDate,
+          timeSlotId: null,
+          roomId: null,
+          status: 'unassigned',
+          attemptNumber: 1,
+          seminarStatus: 'terdaftar',
+          seminarResult: 'belum_dinilai',
+          isSeminarPassed: false,
+          notes: `Impor Data Seminar Proposal TA: ${activePeriod.academicYear} (${activePeriod.semester}). Reviewer menunggu penugasan admin.`,
+        };
+        newItems.push(item);
+        successCount++;
+      } else {
+        // Kegiatan Sidang:
+        const reviewerId = row.matchedReviewerId || lecturers[0]?.id || 'lec-1';
+        const item: ScheduleItem = {
+          id: `sch-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+          activityType: 'sidang',
+          nim: cleanNim,
+          studentName: row.nama,
+          thesisTitle: row.judul,
+          thesisType: row.jenis || 'Skripsi',
+          studyProgram: 'Teknik Informatika',
+          academicYear: `${activePeriod.academicYear} ${activePeriod.semester}`,
+          academicPeriodId: activePeriod.id,
+          reviewerName: row.dosenReviewer,
+          advisorName: row.dosenPembimbing,
+          seminarScore: row.nilaiSeminar,
+          examiner1Id: reviewerId,
+          examiner2Id: advisorId,
+          examiner3Id: '', // Tanpa penentuan Penguji 3 saat impor
+          date: defaultDate || selectedDate,
+          timeSlotId: null,
+          roomId: null,
+          status: 'unassigned',
+          isSeminarPassed: true, // Impor sidang menyertakan nilai seminar
+          notes: `Impor Excel/CSV TA: ${activePeriod.academicYear} (${activePeriod.semester}). Nilai Seminar: ${row.nilaiSeminar}`,
+        };
+        newItems.push(item);
+        successCount++;
+      }
     }
 
     if (newItems.length > 0) {
@@ -1473,6 +1821,12 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         deleteStudentsBulk,
         scheduledDates,
         matrixCardCountsByDate,
+        activityTypeFilter,
+        setActivityTypeFilter,
+        assignSeminarReviewer,
+        recordSeminarResult,
+        rescheduleSeminar,
+        validateSidangEligibility,
         toasts,
         addToast,
         removeToast,
