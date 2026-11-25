@@ -138,6 +138,10 @@ Sistem menerapkan integrasi berantai antara **Seminar Skripsi/Proposal** dan **S
      - **P1 (Ketua Penguji)**: Terkunci otomatis dari Reviewer Seminar yang telah dinyatakan sah/lulus.
      - **P2 (Penguji 2)**: Terkunci otomatis ke Dosen Pembimbing Seminar.
      - **P3 (Penguji 3)**: Ditentukan oleh Administrator pada Papan Jadwal.
+5. **Sumber Data Tunggal & Auto-Provisioning Pengajuan Sidang**:
+   - Sumber impor data pendaftaran mahasiswa terpusat pada kegiatan Seminar Proposal.
+   - Administrator tidak perlu mengimpor data pengajuan sidang secara terpisah/manual.
+   - Ketika mahasiswa dinyatakan **Lulus Seminar** (`hasil = 'lulus'`), sistem secara otomatis membuat record `pengajuan_sidang` di database dan kartu sidang **langsung aktif di antrean Sidang** (`status = 'unassigned'`) dengan Ketua Penguji (P1) dan Penguji 2 (P2) yang sudah terisi otomatis.
 
 ### F. Automatic Account Provisioning (Penyediaan Akun Otomatis)
 Sistem menerapkan **Full Automatic Account Provisioning** baik pada level aplikasi frontend/klien maupun pada level basis data relasional PostgreSQL:

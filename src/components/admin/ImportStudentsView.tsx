@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { useSchedule } from '../../context/ScheduleContext';
-import { ImportedStudentRow, ActivityType } from '../../types';
+import { ImportedStudentRow } from '../../types';
 import { 
   parseImportFile, 
   processImportRows, 
@@ -18,7 +18,7 @@ import {
   Check,
   CalendarDays,
   BookOpen,
-  GraduationCap
+  ArrowRight
 } from 'lucide-react';
 
 interface ImportStudentsViewProps {
@@ -28,7 +28,6 @@ interface ImportStudentsViewProps {
 export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSuccessNavigate }) => {
   const { lecturers, importStudentsFromData, addToast, activePeriod } = useSchedule();
   
-  const [activityType, setActivityType] = useState<ActivityType>('seminar');
   const [file, setFile] = useState<File | null>(null);
   const [parsedRows, setParsedRows] = useState<ImportedStudentRow[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -53,9 +52,10 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
         return;
       }
 
-      const processed = processImportRows(rawJson, lecturers, activityType);
+      // Seluruh data pendaftaran mahasiswa diimpor untuk kegiatan Seminar (sumber data tunggal)
+      const processed = processImportRows(rawJson, lecturers, 'seminar');
       setParsedRows(processed);
-      addToast('success', 'File Terbaca', `${processed.length} data ${activityType === 'seminar' ? 'Seminar' : 'Sidang'} berhasil dimuat.`);
+      addToast('success', 'File Terbaca', `${processed.length} data mahasiswa seminar berhasil dimuat.`);
     } catch (err: any) {
       console.error(err);
       addToast('error', 'Gagal Membaca File', 'Pastikan format file xlsx/csv sesuai dengan template.');
@@ -72,85 +72,44 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
     }
 
     setIsProcessing(true);
-    const demoData = activityType === 'seminar'
-      ? [
-          {
-            'NIM': '10120301',
-            'Nama': 'FARHAN KURNIAWAN',
-            'Judul': 'Sistem Rekomendasi Pemilihan Dosen Pembimbing Menggunakan Algoritma Content-Based Filtering',
-            'Jenis': 'Seminar Proposal',
-            'Dosen Pembimbing': 'Andri Heryandi, S.T., M.T.'
-          },
-          {
-            'NIM': '10120305',
-            'Nama': 'TIARA ANGGRAENI',
-            'Judul': 'Penerapan Algoritma YOLOv8 untuk Deteksi Rambu Lalu Lintas Secara Real-Time pada Kendaraan Otonom',
-            'Jenis': 'Seminar Proposal',
-            'Dosen Pembimbing': 'Chrismikha Hardyanto, M.Kom.'
-          },
-          {
-            'NIM': '10120310',
-            'Nama': 'RIZKY RAMADHAN',
-            'Judul': 'Pengembangan Aplikasi Pemantau Kualitas Udara IoT Berbasis ESP32 dan Dashboard Web',
-            'Jenis': 'Seminar Proposal',
-            'Dosen Pembimbing': 'Sopian Alviana, M.Kom.'
-          },
-          {
-            'NIM': '10120315',
-            'Nama': 'AULIA CITRA LESTARI',
-            'Judul': 'Klasifikasi Tingkat Kematangan Buah Kopi Menggunakan Support Vector Machine Berbasis Fitur Warna HSV',
-            'Jenis': 'Seminar Proposal',
-            'Dosen Pembimbing': 'Dr. Marliana Budhiningtias, M.Si.'
-          }
-        ]
-      : [
-          {
-            'NIM': '10120301',
-            'Nama': 'FARHAN KURNIAWAN',
-            'Judul': 'Sistem Rekomendasi Pemilihan Dosen Pembimbing Menggunakan Algoritma Content-Based Filtering',
-            'Jenis': 'Skripsi',
-            'Dosen Pembimbing': 'Andri Heryandi, S.T., M.T.',
-            'Dosen Reviewer': 'Dian Dharmayanti, S.T., M.Kom.',
-            'Nilai Seminar': 86.5
-          },
-          {
-            'NIM': '10120305',
-            'Nama': 'TIARA ANGGRAENI',
-            'Judul': 'Penerapan Algoritma YOLOv8 untuk Deteksi Rambu Lalu Lintas Secara Real-Time pada Kendaraan Otonom',
-            'Jenis': 'Skripsi',
-            'Dosen Pembimbing': 'Chrismikha Hardyanto, M.Kom.',
-            'Dosen Reviewer': 'Iskandar Ikbal, M.Kom.',
-            'Nilai Seminar': 88.0
-          },
-          {
-            'NIM': '10120310',
-            'Nama': 'RIZKY RAMADHAN',
-            'Judul': 'Pengembangan Aplikasi Pemantau Kualitas Udara IoT Berbasis ESP32 dan Dashboard Web',
-            'Jenis': 'Tugas Akhir',
-            'Dosen Pembimbing': 'Sopian Alviana, M.Kom.',
-            'Dosen Reviewer': 'Angga Setiyadi, M.Kom., CITPM',
-            'Nilai Seminar': 84.5
-          },
-          {
-            'NIM': '10120315',
-            'Nama': 'AULIA CITRA LESTARI',
-            'Judul': 'Klasifikasi Tingkat Kematangan Buah Kopi Menggunakan Support Vector Machine Berbasis Fitur Warna HSV',
-            'Jenis': 'Skripsi',
-            'Dosen Pembimbing': 'Dr. Marliana Budhiningtias, M.Si.',
-            'Dosen Reviewer': 'Taufiq Nurhadi, S.Kom., M.T.',
-            'Nilai Seminar': 89.0
-          }
-        ];
+    const demoData = [
+      {
+        'NIM': '10120301',
+        'Nama': 'FARHAN KURNIAWAN',
+        'Judul': 'Sistem Rekomendasi Pemilihan Dosen Pembimbing Menggunakan Algoritma Content-Based Filtering',
+        'Jenis': 'Seminar Proposal',
+        'Dosen Pembimbing': 'Andri Heryandi, S.T., M.T.'
+      },
+      {
+        'NIM': '10120305',
+        'Nama': 'TIARA ANGGRAENI',
+        'Judul': 'Penerapan Algoritma YOLOv8 untuk Deteksi Rambu Lalu Lintas Secara Real-Time pada Kendaraan Otonom',
+        'Jenis': 'Seminar Proposal',
+        'Dosen Pembimbing': 'Chrismikha Hardyanto, M.Kom.'
+      },
+      {
+        'NIM': '10120310',
+        'Nama': 'RIZKY RAMADHAN',
+        'Judul': 'Pengembangan Aplikasi Pemantau Kualitas Udara IoT Berbasis ESP32 dan Dashboard Web',
+        'Jenis': 'Seminar Proposal',
+        'Dosen Pembimbing': 'Sopian Alviana, M.Kom.'
+      },
+      {
+        'NIM': '10120315',
+        'Nama': 'AULIA CITRA LESTARI',
+        'Judul': 'Klasifikasi Tingkat Kematangan Buah Kopi Menggunakan Support Vector Machine Berbasis Fitur Warna HSV',
+        'Jenis': 'Seminar Proposal',
+        'Dosen Pembimbing': 'Dr. Marliana Budhiningtias, M.Si.'
+      }
+    ];
 
-    const processed = processImportRows(demoData, lecturers, activityType);
+    const processed = processImportRows(demoData, lecturers, 'seminar');
     setParsedRows(processed);
     setIsProcessing(false);
     addToast(
       'info', 
       'Demo Data Dimuat', 
-      activityType === 'seminar'
-        ? '4 data pendaftaran seminar berhasil dimuat untuk diuji. Reviewer akan dipilih di Papan Jadwal.'
-        : '4 data simulasi sidang berhasil dimuat untuk diuji.'
+      '4 data pendaftaran seminar berhasil dimuat. Dosen Reviewer akan ditentukan di Papan Jadwal dan kelulusan seminar otomatis menerbitkan kartu Sidang.'
     );
   };
 
@@ -179,106 +138,49 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
   };
 
   const validCount = parsedRows.filter(r => r.isValid).length;
-  const isSeminar = activityType === 'seminar';
 
   return (
     <div className="space-y-5">
-      {/* ── Top Header Card (Dashboard Integrated) ── */}
+      {/* ── Top Header Card ── */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <span className={`text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full border ${
-              isSeminar 
-                ? 'bg-emerald-50 text-emerald-700 border-emerald-200' 
-                : 'bg-indigo-50 text-indigo-700 border-indigo-200'
-            }`}>
-              Impor Data {isSeminar ? 'Seminar' : 'Sidang'}
+            <span className="text-[11px] font-semibold uppercase tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
+              Sumber Data Tunggal
             </span>
           </div>
           <h2 className="text-xl font-bold text-slate-900 mt-1.5 flex items-center gap-2">
-            <span>Impor Data Mahasiswa ({isSeminar ? 'Pendaftaran Seminar' : 'Pengajuan Sidang'})</span>
+            <span>Impor Data Mahasiswa Pendaftaran Seminar (XLSX / CSV)</span>
           </h2>
           <p className="text-sm text-slate-500 mt-0.5">
-            Unggah file berkas untuk dimasukkan otomatis ke dalam antrean penjadwalan terpadu
+            Pintu masuk utama data mahasiswa SIM SKRIPSI. Pengajuan sidang skripsi akan diterbitkan otomatis saat seminar lulus.
           </p>
         </div>
 
         <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
           <button
-            onClick={() => downloadSampleTemplate('xlsx', activityType)}
+            onClick={() => downloadSampleTemplate('xlsx', 'seminar')}
             className="flex items-center gap-1.5 h-10 px-3.5 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors shadow-2xs"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5 text-emerald-600" />
             <span>Template XLSX</span>
           </button>
           <button
-            onClick={() => downloadSampleTemplate('csv', activityType)}
+            onClick={() => downloadSampleTemplate('csv', 'seminar')}
             className="flex items-center gap-1.5 h-10 px-3.5 text-xs font-semibold text-slate-700 bg-white hover:bg-slate-50 border border-slate-200 rounded-xl transition-colors shadow-2xs"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5 text-slate-600" />
             <span>Template CSV</span>
           </button>
           <button
             onClick={handleLoadDemoData}
             disabled={!canImport}
-            className={`flex items-center gap-1.5 h-10 px-4 text-xs font-semibold border rounded-xl transition-colors shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed ${
-              isSeminar
-                ? 'text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border-emerald-200'
-                : 'text-indigo-700 bg-indigo-50 hover:bg-indigo-100 border-indigo-200'
-            }`}
+            className="flex items-center gap-1.5 h-10 px-4 text-xs font-semibold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl transition-colors shadow-2xs disabled:opacity-50 disabled:cursor-not-allowed"
           >
             <Sparkles className="w-3.5 h-3.5 text-amber-500" />
             <span>Muat Data Demo</span>
           </button>
         </div>
-      </div>
-
-      {/* ── Activity Selector Tabs ── */}
-      <div className="bg-white rounded-2xl p-3 border border-slate-200/80 shadow-xs flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <span className="text-xs font-semibold text-slate-600">Pilih Kategori:</span>
-          <div className="inline-flex rounded-xl p-1 bg-slate-100 border border-slate-200">
-            <button
-              type="button"
-              onClick={() => {
-                setActivityType('seminar');
-                setParsedRows([]);
-                setFile(null);
-              }}
-              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                isSeminar
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-emerald-700'
-              }`}
-            >
-              <BookOpen className="w-3.5 h-3.5" />
-              <span>Pendaftaran Seminar</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setActivityType('sidang');
-                setParsedRows([]);
-                setFile(null);
-              }}
-              className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-all flex items-center gap-1.5 ${
-                !isSeminar
-                  ? 'bg-indigo-600 text-white shadow-xs'
-                  : 'text-slate-600 hover:text-indigo-700'
-              }`}
-            >
-              <GraduationCap className="w-3.5 h-3.5" />
-              <span>Pengajuan Sidang</span>
-            </button>
-          </div>
-        </div>
-
-        <span className="text-xs text-slate-500 hidden sm:inline">
-          {isSeminar 
-            ? 'Reviewer ditentukan oleh Administrator pada Papan Jadwal' 
-            : 'Mahasiswa wajib Lulus Seminar untuk dijadwalkan sidang'}
-        </span>
       </div>
 
       {/* ── Active Academic Period Information & Guard Banner ── */}
@@ -319,25 +221,25 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
         </div>
       )}
 
-      {/* ── Business Rule Notice ── */}
-      <div className={`border rounded-2xl p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs ${
-        isSeminar ? 'bg-emerald-50/70 border-emerald-100 text-emerald-900' : 'bg-indigo-50/70 border-indigo-100 text-indigo-900'
-      }`}>
-        <div className="flex items-center gap-2.5">
-          <Info className={`w-5 h-5 shrink-0 ${isSeminar ? 'text-emerald-600' : 'text-indigo-600'}`} />
-          <div className="leading-relaxed">
-            <span className="font-bold">Ketentuan {isSeminar ? 'Seminar Proposal' : 'Sidang Skripsi'}: </span>
-            {isSeminar ? (
-              <span>
-                Data impor hanya mewajibkan <strong>Dosen Pembimbing</strong>. Dosen Reviewer <strong>wajib dipilih Administrator</strong> di Papan Jadwal saat penentuan slot (Aturan 2.4).
-              </span>
-            ) : (
-              <span>
-                <strong>Dosen Reviewer</strong> (Seminar Lulus) ➔ Ketua Penguji (P1) | 
-                <strong> Dosen Pembimbing</strong> ➔ Penguji 2 (P2) | 
-                <strong> Penguji 3</strong> ➔ Ditentukan proporsional saat penjadwalan pada matriks.
-              </span>
-            )}
+      {/* ── Business Pipeline Architecture Banner ── */}
+      <div className="bg-gradient-to-r from-emerald-50/90 to-teal-50/60 border border-emerald-200 rounded-2xl p-4 text-xs text-emerald-950 shadow-xs">
+        <div className="flex items-start gap-3">
+          <div className="w-8 h-8 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+            <Info className="w-4 h-4" />
+          </div>
+          <div className="space-y-1 leading-relaxed">
+            <span className="font-bold text-sm text-emerald-900 block">
+              Konsep Sumber Data Tunggal (Seminar ➔ Sidang Otomatis):
+            </span>
+            <p className="text-emerald-900">
+              1. <strong>Impor Mahasiswa Seminar</strong>: Administrator mengimpor data pendaftar Seminar (NIM, Nama, Judul, Jenis, Pembimbing). Akun pengguna mahasiswa otomatis diterbitkan.
+            </p>
+            <p className="text-emerald-900">
+              2. <strong>Penjadwalan Seminar</strong>: Dosen Reviewer dipilih langsung oleh Administrator pada Papan Jadwal.
+            </p>
+            <p className="text-emerald-900">
+              3. <strong>Pencatatan Hasil &amp; Auto-Provision Sidang</strong>: Ketika mahasiswa dinyatakan <strong>Lulus Seminar</strong>, sistem secara otomatis membuat pengajuan sidang di database dan kartu sidang <strong>langsung aktif di antrean Sidang</strong> dengan Ketua Penguji terkunci dari Reviewer Seminar dan Pembimbing terkunci dari Seminar.
+            </p>
           </div>
         </div>
       </div>
@@ -351,9 +253,7 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
             }}
             className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all duration-200 ${
               canImport 
-                ? isSeminar
-                  ? 'border-emerald-300 hover:border-emerald-500 bg-emerald-50/30 hover:bg-emerald-50/60 cursor-pointer'
-                  : 'border-indigo-300 hover:border-indigo-500 bg-indigo-50/30 hover:bg-indigo-50/60 cursor-pointer' 
+                ? 'border-emerald-300 hover:border-emerald-500 bg-emerald-50/20 hover:bg-emerald-50/50 cursor-pointer' 
                 : 'border-slate-300 bg-slate-50 opacity-60 cursor-not-allowed'
             }`}
           >
@@ -368,17 +268,17 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
                 }
               }}
             />
-            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mx-auto mb-3 shadow-sm ${
-              isSeminar ? 'bg-emerald-100 text-emerald-600' : 'bg-indigo-100 text-indigo-600'
-            }`}>
+            <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-600 flex items-center justify-center mx-auto mb-3 shadow-sm">
               <Upload className="w-7 h-7" />
             </div>
             <h4 className="text-base font-bold text-slate-800">
               Pilih Berkas XLSX / CSV atau Tarik File ke Sini
             </h4>
             <p className="text-xs text-slate-500 mt-1">
-              Kolom: NIM, Nama, Judul, Jenis, Dosen Pembimbing
-              {!isSeminar && ', Dosen Reviewer, Nilai Seminar'}
+              Kolom wajib: <strong>NIM</strong>, <strong>Nama</strong>, <strong>Judul</strong>, <strong>Jenis</strong>, <strong>Dosen Pembimbing</strong>
+            </p>
+            <p className="text-[11px] text-emerald-700 font-semibold mt-2">
+              (Dosen Reviewer tidak perlu ada di file — ditentukan langsung di Papan Jadwal)
             </p>
           </div>
         </div>
@@ -415,12 +315,10 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
               <button
                 onClick={handleConfirmImport}
                 disabled={validCount === 0}
-                className={`flex items-center gap-2 h-9 px-4 text-xs font-bold text-white rounded-xl shadow-xs transition-colors disabled:opacity-50 ${
-                  isSeminar ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-indigo-600 hover:bg-indigo-700'
-                }`}
+                className="flex items-center gap-2 h-9 px-4 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-xs transition-colors disabled:opacity-50"
               >
                 <Check className="w-4 h-4" />
-                <span>Simpan &amp; Masukkan ke Antrean ({validCount})</span>
+                <span>Simpan &amp; Masukkan ke Antrean Seminar ({validCount})</span>
               </button>
             </div>
           </div>
@@ -433,21 +331,15 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
                   <tr className="bg-slate-50 text-slate-600 font-bold border-b border-slate-200">
                     <th className="p-3 text-center w-12 uppercase tracking-wider text-[11px]">No</th>
                     <th className="p-3 min-w-[200px] uppercase tracking-wider text-[11px]">Mahasiswa &amp; NIM</th>
-                    <th className="p-3 min-w-[260px] uppercase tracking-wider text-[11px]">Judul</th>
-                    <th className="p-3 min-w-[180px] uppercase tracking-wider text-[11px]">
-                      {isSeminar ? 'Dosen Reviewer (Admin)' : 'Ketua Penguji (Reviewer)'}
-                    </th>
+                    <th className="p-3 min-w-[260px] uppercase tracking-wider text-[11px]">Judul Penelitian</th>
                     <th className="p-3 min-w-[180px] uppercase tracking-wider text-[11px]">Dosen Pembimbing</th>
-                    {!isSeminar && (
-                      <th className="p-3 min-w-[200px] uppercase tracking-wider text-[11px]">Penguji 3 (Anggota)</th>
-                    )}
+                    <th className="p-3 min-w-[180px] uppercase tracking-wider text-[11px]">Dosen Reviewer</th>
                     <th className="p-3 text-center w-28 uppercase tracking-wider text-[11px]">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100">
                   {parsedRows.map((row, idx) => {
                     const advisorLec = lecturers.find(l => l.id === row.matchedAdvisorId);
-                    const reviewerLec = lecturers.find(l => l.id === row.matchedReviewerId);
 
                     return (
                       <tr key={idx} className={row.isValid ? 'hover:bg-slate-50' : 'bg-rose-50/50'}>
@@ -456,9 +348,7 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
                         </td>
 
                         <td className="p-3">
-                          <div className={`font-mono text-[11px] font-bold ${
-                            isSeminar ? 'text-emerald-700' : 'text-indigo-700'
-                          }`}>
+                          <div className="font-mono text-[11px] font-bold text-emerald-700">
                             {row.nim}
                           </div>
                           <div className="font-bold text-slate-900 uppercase">
@@ -476,30 +366,22 @@ export const ImportStudentsView: React.FC<ImportStudentsViewProps> = ({ onSucces
                         </td>
 
                         <td className="p-3">
-                          {isSeminar ? (
-                            <span className="text-emerald-700 font-semibold italic text-[11px]">
-                              Dipilih di Papan Jadwal
-                            </span>
-                          ) : (
-                            <div className="font-semibold text-slate-900">
-                              {reviewerLec ? reviewerLec.name : row.dosenReviewer}
-                            </div>
-                          )}
-                        </td>
-
-                        <td className="p-3">
                           <div className="font-semibold text-slate-900">
                             {advisorLec ? advisorLec.name : row.dosenPembimbing}
                           </div>
+                          <span className="text-[10px] text-slate-500">
+                            (Menjadi P2 saat Sidang)
+                          </span>
                         </td>
 
-                        {!isSeminar && (
-                          <td className="p-3">
-                            <span className="text-slate-400 italic text-[11px]">
-                              Ditentukan saat Penjadwalan
-                            </span>
-                          </td>
-                        )}
+                        <td className="p-3">
+                          <span className="text-emerald-700 font-semibold italic text-[11px]">
+                            Dipilih di Papan Jadwal
+                          </span>
+                          <span className="text-[10px] text-slate-400 block mt-0.5">
+                            (Menjadi P1 saat Sidang Lulus)
+                          </span>
+                        </td>
 
                         <td className="p-3 text-center">
                           {row.isValid ? (

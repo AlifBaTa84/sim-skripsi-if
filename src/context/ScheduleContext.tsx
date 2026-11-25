@@ -1074,6 +1074,7 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   }, [schedules, lecturers, addToast]);
 
   // Mencatat Hasil Pelaksanaan Seminar (Lulus vs Belum Lulus)
+  // Aturan: Jika seminar lulus maka otomatis data pengajuan sidang di database diisi dan card aktif di antrean sidang
   const recordSeminarResult = useCallback((
     itemId: string,
     result: 'lulus' | 'belum_lulus',
@@ -1084,21 +1085,88 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (!item) return { success: false, error: 'Data seminar tidak ditemukan.' };
 
     const isLulus = result === 'lulus';
+    const finalScore = score !== undefined ? score : item.seminarScore;
+    const targetPeriod = activePeriod || academicPeriods.find(p => p.isActive) || academicPeriods[0];
+    const reviewer = lecturers.find(l => l.id === item.examiner1Id);
+    const advisor = lecturers.find(l => l.id === item.examiner2Id);
 
-    setSchedules(prev => prev.map(s => {
-      if (s.id === itemId) {
-        return {
-          ...s,
-          seminarResult: result,
-          isSeminarPassed: isLulus,
-          seminarScore: score !== undefined ? score : s.seminarScore,
-          status: isLulus ? 'completed' : 'unassigned',
-          seminarStatus: isLulus ? 'selesai' : 'terdaftar',
-          notes: feedback || s.notes,
-        };
+    setSchedules(prev => {
+      // 1. Update status kartu seminar
+      let updated = prev.map(s => {
+        if (s.id === itemId) {
+          return {
+            ...s,
+            seminarResult: result,
+            isSeminarPassed: isLulus,
+            seminarScore: finalScore,
+            status: (isLulus ? 'completed' : 'unassigned') as 'completed' | 'unassigned',
+            seminarStatus: (isLulus ? 'selesai' : 'terdaftar') as any,
+            notes: feedback || s.notes,
+          };
+        }
+        return s;
+      });
+
+      // 2. Jika LULUS, otomatis terbitkan & aktifkan kartu Sidang di antrean
+      if (isLulus) {
+        const existingSidangIdx = updated.findIndex(
+          s => s.nim === item.nim && s.activityType === 'sidang'
+        );
+
+        if (existingSidangIdx >= 0) {
+          // Perbarui pengajuan sidang yang sudah ada menjadi aktif
+          const existing = updated[existingSidangIdx];
+          updated[existingSidangIdx] = {
+            ...existing,
+            examiner1Id: item.examiner1Id, // Locked dari Reviewer Seminar
+            reviewerName: reviewer?.name || item.reviewerName,
+            examiner2Id: item.examiner2Id, // Locked dari Pembimbing Seminar
+            advisorName: advisor?.name || item.advisorName,
+            seminarScore: finalScore,
+            isSeminarPassed: true,
+            status: 'unassigned', // Aktif di antrean sidang!
+            academicPeriodId: targetPeriod?.id || existing.academicPeriodId,
+            academicYear: targetPeriod ? `${targetPeriod.academicYear} ${targetPeriod.semester}` : existing.academicYear,
+          };
+        } else {
+          // Buat kartu Sidang baru yang langsung aktif di antrean
+          const newSidangCard: ScheduleItem = {
+            id: `sidang-${item.nim}`,
+            nim: item.nim,
+            studentName: item.studentName,
+            thesisTitle: item.thesisTitle,
+            studyProgram: item.studyProgram || 'Teknik Informatika',
+            academicYear: targetPeriod ? `${targetPeriod.academicYear} ${targetPeriod.semester}` : item.academicYear,
+            academicPeriodId: targetPeriod?.id || item.academicPeriodId,
+            thesisType: item.thesisType || 'Skripsi',
+            activityType: 'sidang',
+            // Ketua Penguji Sidang (P1) terkunci dari Reviewer Seminar yang meluluskan
+            examiner1Id: item.examiner1Id,
+            reviewerName: reviewer?.name || item.reviewerName,
+            // Penguji 2 (P2) terkunci dari Dosen Pembimbing Seminar
+            examiner2Id: item.examiner2Id,
+            advisorName: advisor?.name || item.advisorName,
+            examiner3Id: '', // Penguji 3 ditentukan saat penjadwalan sidang
+            date: '',
+            timeSlotId: null,
+            roomId: null,
+            status: 'unassigned', // AKTIF DI ANTREAN SIDANG!
+            seminarScore: finalScore,
+            isSeminarPassed: true,
+            seminarRegistrationId: item.seminarRegistrationId,
+            notes: `Otomatis diterbitkan dari kelulusan Seminar Proposal (Nilai: ${finalScore ?? '-'}).`,
+          };
+          updated = [...updated, newSidangCard];
+        }
+      } else {
+        // Jika belum lulus, pastikan tidak ada pengajuan sidang aktif yang belum terjadwal
+        updated = updated.filter(
+          s => !(s.nim === item.nim && s.activityType === 'sidang' && s.status === 'unassigned')
+        );
       }
-      return s;
-    }));
+
+      return updated;
+    });
 
     if (item.seminarRegistrationId) {
       dbRepository.recordSeminarResult(item.seminarRegistrationId, result, score, feedback).catch(err => {
@@ -1109,15 +1177,15 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     if (isLulus) {
       addToast(
         'success',
-        'Seminar Dinyatakan LULUS!',
-        `Mahasiswa ${item.studentName} (${item.nim}) resmi Lulus Seminar dengan nilai ${score ?? '-'}. Mahasiswa kini memenuhi syarat untuk Sidang Skripsi.`
+        'Seminar LULUS ➔ Pengajuan Sidang Otomatis Diterbitkan!',
+        `Mahasiswa ${item.studentName} (${item.nim}) LULUS Seminar (Nilai: ${finalScore ?? '-'}). Data sidang tersimpan di database dan kartu sidang kini AKTIF di Antrean Sidang dengan Ketua Penguji: ${reviewer?.name || item.reviewerName || 'Reviewer'}.`
       );
       try {
         confetti({
-          particleCount: 40,
-          spread: 60,
+          particleCount: 45,
+          spread: 65,
           origin: { y: 0.7 },
-          colors: ['#10b981', '#34d399', '#059669'],
+          colors: ['#10b981', '#34d399', '#059669', '#4f46e5'],
         });
       } catch {
         // ignore
@@ -1131,7 +1199,7 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     }
 
     return { success: true };
-  }, [schedules, addToast]);
+  }, [schedules, addToast, activePeriod, academicPeriods, lecturers]);
 
   // Menjadwalkan Ulang Seminar yang Belum Lulus (Aturan 2.2: same_schedule)
   const rescheduleSeminar = useCallback((itemId: string): { success: boolean; error?: string } => {

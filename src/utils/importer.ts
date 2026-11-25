@@ -74,14 +74,15 @@ export async function parseImportFile(file: File): Promise<any[]> {
 
 /**
  * Map raw sheet rows to validated ImportedStudentRow
- * Standard required columns: NIM, Nama, Judul, Jenis, Dosen Pembimbing
- * - Sidang: Memerlukan Dosen Reviewer & Nilai Seminar
- * - Seminar: Reviewer opsional pada file impor (ditentukan Admin pada Papan Jadwal - Aturan 2.4)
+ * Sumber data tunggal: Data pendaftaran mahasiswa diimpor untuk kegiatan Seminar.
+ * Kolom standar: NIM, Nama, Judul, Jenis, Dosen Pembimbing
+ * - Dosen Reviewer: Ditentukan oleh Administrator pada Papan Jadwal (tidak ada di file impor)
+ * - Data Sidang: Otomatis dibuat oleh sistem saat mahasiswa dinyatakan Lulus Seminar.
  */
 export function processImportRows(
   rawRows: any[], 
   lecturers: Lecturer[],
-  activityType: 'seminar' | 'sidang' = 'sidang'
+  activityType: 'seminar' | 'sidang' = 'seminar'
 ): ImportedStudentRow[] {
   const isSeminar = activityType === 'seminar';
 
@@ -102,7 +103,7 @@ export function processImportRows(
     const nim = findValue(['nim', 'nomorinduk', 'student_id']);
     const nama = findValue(['nama', 'namamahasiswa', 'namalengkap', 'student_name']);
     const judul = findValue(['judul', 'judultugasakhir', 'judulskripsi', 'title']);
-    const jenis = findValue(['jenis', 'jenissidang', 'tipe', 'type']) || (isSeminar ? 'Seminar Proposal' : 'Skripsi');
+    const jenis = findValue(['jenis', 'jenissidang', 'tipe', 'type']) || 'Seminar Proposal';
     const dosenPembimbing = findValue(['dosenpembimbing', 'pembimbing', 'advisor', 'pembimbing1']);
     const dosenReviewer = findValue(['dosenreviewer', 'reviewer', 'pengujireviewer', 'pengujiseminar']);
     const nilaiSeminar = findValue(['nilaiseminar', 'nilai', 'score', 'nilaisempro']);
@@ -113,10 +114,10 @@ export function processImportRows(
     const validationErrors: string[] = [];
     if (!nim) validationErrors.push('NIM wajib diisi');
     if (!nama) validationErrors.push('Nama mahasiswa wajib diisi');
-    if (!judul) validationErrors.push('Judul skripsi wajib diisi');
+    if (!judul) validationErrors.push('Judul penelitian/skripsi wajib diisi');
     if (!dosenPembimbing) validationErrors.push('Dosen Pembimbing wajib diisi');
     
-    // Aturan 2.4: Pada Seminar, kolom Reviewer tidak wajib pada file impor
+    // Pada Seminar (sumber data tunggal), Reviewer tidak boleh dari impor, dipilih di Papan Jadwal
     if (!isSeminar && !dosenReviewer) {
       validationErrors.push('Dosen Reviewer wajib diisi');
     }
@@ -132,7 +133,7 @@ export function processImportRows(
       judul,
       jenis,
       dosenPembimbing,
-      dosenReviewer: isSeminar ? (dosenReviewer || '') : dosenReviewer,
+      dosenReviewer: isSeminar ? '' : dosenReviewer,
       nilaiSeminar: nilaiSeminar || '-',
       activityType,
       matchedAdvisorId: matchedAdvisor?.id,
@@ -351,7 +352,7 @@ export function getSampleCSVContent(): string {
 /**
  * Downloads a pre-formatted sample Excel/CSV template for the user
  */
-export function downloadSampleTemplate(format: 'csv' | 'xlsx' = 'xlsx', activityType: 'seminar' | 'sidang' = 'sidang') {
+export function downloadSampleTemplate(format: 'csv' | 'xlsx' = 'xlsx', activityType: 'seminar' | 'sidang' = 'seminar') {
   const isSeminar = activityType === 'seminar';
 
   const data = isSeminar

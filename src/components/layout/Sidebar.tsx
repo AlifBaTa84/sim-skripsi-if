@@ -210,10 +210,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <button
                 onClick={() => handleNavClick('impor')}
                 className={navBtn(currentNav === 'impor')}
-                title="Impor Data Mahasiswa Sidang (Excel / CSV)"
+                title="Impor Data Mahasiswa Seminar (Excel / CSV)"
               >
                 <Upload className={`w-4 h-4 shrink-0 ${currentNav === 'impor' ? 'text-white' : 'text-emerald-500'}`} />
-                {!isCollapsed && <span className="flex-1 text-left truncate">Impor Data Sidang</span>}
+                {!isCollapsed && <span className="flex-1 text-left truncate">Impor Mahasiswa</span>}
               </button>
 
               {/* Rekapitulasi */}

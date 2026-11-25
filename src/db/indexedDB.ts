@@ -1054,9 +1054,22 @@ class RelationalDatabaseEngine {
     const exe = await this.getById<PelaksanaanSeminarRecord>(STORES.PELAKSANAAN_SEMINAR, pelaksanaanId);
     if (!exe) return { success: false, error: 'Data pelaksanaan seminar tidak ditemukan' };
 
-    const tx = db.transaction([STORES.PENDAFTARAN_SEMINAR, STORES.PELAKSANAAN_SEMINAR], 'readwrite');
+    const allPengajuan = await this.getAll<PengajuanSidangRecord>(STORES.PENGAJUAN_SIDANG);
+    const existingPengajuan = allPengajuan.find(
+      p => p.mahasiswa_nim === reg.mahasiswa_nim || p.pendaftaran_seminar_id === reg.id
+    );
+
+    const allPeriods = await this.getAll<PeriodeAkademikRecord>(STORES.PERIODE_AKADEMIK);
+    const activePeriod = allPeriods.find(p => p.is_active) || allPeriods[0];
+    const targetPeriodId = activePeriod ? activePeriod.id : reg.periode_akademik_id;
+
+    const tx = db.transaction(
+      [STORES.PENDAFTARAN_SEMINAR, STORES.PELAKSANAAN_SEMINAR, STORES.PENGAJUAN_SIDANG],
+      'readwrite'
+    );
     const regStore = tx.objectStore(STORES.PENDAFTARAN_SEMINAR);
     const exeStore = tx.objectStore(STORES.PELAKSANAAN_SEMINAR);
+    const pengajuanStore = tx.objectStore(STORES.PENGAJUAN_SIDANG);
 
     exeStore.put({
       ...exe,
@@ -1076,6 +1089,44 @@ class RelationalDatabaseEngine {
       nilai_akhir: hasil === 'lulus' ? (nilai ?? reg.nilai_akhir) : undefined,
       updated_at: now,
     });
+
+    // Otomatis terbitkan / aktifkan pengajuan sidang ketika mahasiswa Lulus Seminar
+    if (hasil === 'lulus') {
+      const finalScore = nilai ?? exe.nilai ?? reg.nilai_akhir;
+      if (existingPengajuan) {
+        pengajuanStore.put({
+          ...existingPengajuan,
+          dosen_reviewer_id: exe.dosen_reviewer_id || existingPengajuan.dosen_reviewer_id,
+          dosen_pembimbing_id: reg.dosen_pembimbing_id,
+          pendaftaran_seminar_id: reg.id,
+          pelaksanaan_seminar_id: exe.id,
+          nilai_seminar: finalScore,
+          status: 'unassigned', // Aktif di antrean sidang
+          updated_at: now,
+        });
+      } else {
+        const newPengajuan: PengajuanSidangRecord = {
+          id: `pengajuan-${reg.mahasiswa_nim}`,
+          mahasiswa_nim: reg.mahasiswa_nim,
+          periode_akademik_id: targetPeriodId,
+          pendaftaran_seminar_id: reg.id,
+          pelaksanaan_seminar_id: exe.id,
+          judul_skripsi: reg.judul_penelitian,
+          jenis: reg.jenis || 'Skripsi',
+          dosen_reviewer_id: exe.dosen_reviewer_id || '', // Reviewer seminar terkunci jadi P1 Sidang
+          dosen_pembimbing_id: reg.dosen_pembimbing_id,    // Pembimbing seminar terkunci jadi P2 Sidang
+          dosen_penguji3_id: undefined,
+          nilai_seminar: finalScore,
+          status: 'unassigned', // Aktif di antrean sidang
+          created_at: now,
+          updated_at: now,
+        };
+        pengajuanStore.put(newPengajuan);
+      }
+    } else if (hasil === 'belum_lulus' && existingPengajuan && existingPengajuan.status === 'unassigned') {
+      // Jika seminar belum lulus, pastikan tidak ada antrean sidang aktif
+      pengajuanStore.delete(existingPengajuan.id);
+    }
 
     await new Promise<void>((resolve, reject) => {
       tx.oncomplete = () => resolve();
