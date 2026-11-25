@@ -1,0 +1,110 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply bg-slate-50 text-slate-800 antialiased selection:bg-indigo-600 selection:text-white;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  }
+}
+
+/* Material Design 3 Elevation classes */
+.elevation-0 {
+  box-shadow: none;
+}
+.elevation-1 {
+  box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05), 0 1px 3px 1px rgba(0, 0, 0, 0.05);
+}
+.elevation-2 {
+  box-shadow: 0 2px 6px 2px rgba(0, 0, 0, 0.06), 0 1px 2px 0 rgba(0, 0, 0, 0.04);
+}
+.elevation-3 {
+  box-shadow: 0 4px 12px 3px rgba(0, 0, 0, 0.07), 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+}
+.elevation-4 {
+  box-shadow: 0 8px 24px 4px rgba(0, 0, 0, 0.09), 0 2px 6px 0 rgba(0, 0, 0, 0.05);
+}
+.elevation-5 {
+  box-shadow: 0 12px 32px 4px rgba(0, 0, 0, 0.12), 0 4px 10px 0 rgba(0, 0, 0, 0.07);
+}
+
+/* Material Design 3 Component Utility Classes */
+@layer components {
+  .m3-dialog {
+    @apply rounded-3xl bg-white border border-slate-200/90 shadow-2xl overflow-hidden;
+  }
+  .m3-btn-primary {
+    @apply inline-flex items-center justify-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 active:bg-indigo-800 rounded-xl transition-all shadow-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2 disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .m3-btn-tonal {
+    @apply inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-semibold text-indigo-700 bg-indigo-50 hover:bg-indigo-100 active:bg-indigo-200/80 border border-indigo-200/70 rounded-xl transition-all disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .m3-btn-outlined {
+    @apply inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-semibold text-slate-700 bg-white hover:bg-slate-50 active:bg-slate-100 border border-slate-300 rounded-xl transition-all disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .m3-btn-text {
+    @apply inline-flex items-center justify-center gap-2 h-10 px-4 text-sm font-semibold text-slate-600 hover:text-slate-900 hover:bg-slate-100 active:bg-slate-200/70 rounded-xl transition-all disabled:opacity-50 disabled:pointer-events-none;
+  }
+  .m3-input {
+    @apply w-full h-11 px-3.5 text-sm bg-slate-50/50 hover:bg-white focus:bg-white border border-slate-300 focus:border-indigo-600 rounded-xl transition-all text-slate-900 placeholder:text-slate-400 focus:outline-none focus:ring-4 focus:ring-indigo-500/15;
+  }
+}
+
+/* Print Stylesheet */
+@media print {
+  /* Hide all dashboard chrome: sidebar, topbar, buttons, modals outside printable */
+  aside,
+  header,
+  nav,
+  footer,
+  button,
+  .print\\:hidden {
+    display: none !important;
+  }
+
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+    padding: 0 !important;
+    margin: 0 !important;
+    font-size: 11pt !important;
+  }
+
+  /* Printable area takes full sheet */
+  #printable-labels-area,
+  #printable-report-area,
+  #printable-dosen-detail,
+  #printable-dosen-modal,
+  .print\\:block {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+
+  /* Prevent page breaks inside cards */
+  .print\\:break-inside-avoid {
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+  }
+}
+
+/* Modern smooth scrollbars */
+::-webkit-scrollbar {
+  width: 7px;
+  height: 7px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
