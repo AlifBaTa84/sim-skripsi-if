@@ -25,8 +25,6 @@ import {
   Menu,
   X,
   Database,
-  LogOut,
-  KeyRound
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { auditAllSchedules } from '../../utils/conflictChecker';
@@ -59,7 +57,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenChangePasswordModal,
 }) => {
   const { role, setRole, schedules, lecturers, rooms, academicPeriods } = useSchedule();
-  const { currentUser, logout, switchActiveRole } = useAuth();
+  const { currentUser } = useAuth();
   const [isMasterOpen, setIsMasterOpen] = useState(true);
 
   const unassignedCount = schedules.filter(s => s.status === 'unassigned').length;
@@ -391,84 +389,52 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         </div>
 
-        {/* Footer: User Profile & Multi-Role Switcher */}
-        <div className="p-3 border-t border-slate-200 bg-slate-50">
-          {!isCollapsed ? (
-            <div className="space-y-3">
-              {/* Role Switcher */}
-              {userRoles.length > 1 ? (
-                <div>
-                  <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
-                    <span>Ganti Peran Aktif:</span>
-                    <span className="text-[9px] text-purple-600 bg-purple-50 px-1.5 rounded font-bold border border-purple-200">Dual Role</span>
+        {/* Footer: Multi-Role Switcher / Indicator */}
+        {(!isCollapsed || userRoles.length > 1) && (
+          <div className="p-3 border-t border-slate-200 bg-slate-50">
+            {!isCollapsed ? (
+              <div>
+                {/* Role Switcher */}
+                {userRoles.length > 1 ? (
+                  <div>
+                    <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-2">
+                      <span>Ganti Peran Aktif:</span>
+                      <span className="text-[9px] text-purple-600 bg-purple-50 px-1.5 rounded font-bold border border-purple-200">Dual Role</span>
+                    </div>
+                    <div className={`grid gap-1 p-1 bg-slate-200/50 rounded-xl ${userRoles.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
+                      {userRoles.map(r => {
+                        const isActive = role === r.id;
+                        return (
+                          <button
+                            key={r.id}
+                            onClick={() => {
+                              setRole(r.id);
+                              if (r.id === 'admin') onSelectNav('schedule');
+                              if (r.id === 'dosen') onSelectNav('dosen-personal');
+                              if (r.id === 'mahasiswa') onSelectNav('mahasiswa-jadwal');
+                            }}
+                            className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
+                              isActive
+                                ? 'bg-white text-indigo-700 shadow-sm'
+                                : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                            }`}
+                          >
+                            <span>{r.icon}</span>
+                            <span>{r.label}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
                   </div>
-                  <div className={`grid gap-1 p-1 bg-slate-200/50 rounded-xl ${userRoles.length === 2 ? 'grid-cols-2' : 'grid-cols-3'}`}>
-                    {userRoles.map(r => {
-                      const isActive = role === r.id;
-                      return (
-                        <button
-                          key={r.id}
-                          onClick={() => {
-                            setRole(r.id);
-                            if (r.id === 'admin') onSelectNav('schedule');
-                            if (r.id === 'dosen') onSelectNav('dosen-personal');
-                            if (r.id === 'mahasiswa') onSelectNav('mahasiswa-jadwal');
-                          }}
-                          className={`flex items-center justify-center gap-1.5 py-1.5 px-2 rounded-lg text-xs font-semibold transition-all ${
-                            isActive
-                              ? 'bg-white text-indigo-700 shadow-sm'
-                              : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                          }`}
-                        >
-                          <span>{r.icon}</span>
-                          <span>{r.label}</span>
-                        </button>
-                      );
-                    })}
+                ) : (
+                  <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-indigo-50 border border-indigo-100">
+                    <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Hak Akses:</span>
+                    <span className="uppercase text-xs font-bold text-indigo-700">{role}</span>
                   </div>
-                </div>
-              ) : (
-                <div className="flex items-center justify-between px-2.5 py-1.5 rounded-lg bg-indigo-50 border border-indigo-100">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Hak Akses:</span>
-                  <span className="uppercase text-xs font-bold text-indigo-700">{role}</span>
-                </div>
-              )}
-
-              {/* User Identity & Logout */}
-              <div className="pt-2 border-t border-slate-200 flex items-center justify-between gap-2">
-                <div className="min-w-0 flex-1">
-                  <p className="text-sm font-semibold text-slate-900 truncate leading-tight" title={currentUser?.name}>
-                    {currentUser?.name || 'Pengguna'}
-                  </p>
-                  <p className="text-[11px] text-slate-400 font-mono truncate mt-0.5">
-                    {currentUser?.email || ''}
-                  </p>
-                </div>
-
-                <div className="flex items-center gap-1 shrink-0">
-                  {onOpenChangePasswordModal && (
-                    <button
-                      onClick={onOpenChangePasswordModal}
-                      className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 transition-colors"
-                      title="Ubah Password Akun"
-                    >
-                      <KeyRound className="w-4 h-4" />
-                    </button>
-                  )}
-
-                  <button
-                    onClick={logout}
-                    className="h-8 w-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                    title="Keluar dari Akun (Logout)"
-                  >
-                    <LogOut className="w-4 h-4" />
-                  </button>
-                </div>
+                )}
               </div>
-            </div>
-          ) : (
-            <div className="flex flex-col items-center gap-2">
-              {userRoles.length > 1 && (
+            ) : (
+              <div className="flex flex-col items-center">
                 <button
                   onClick={() => {
                     const nextRole = role === 'admin' ? 'dosen' : 'admin';
@@ -481,28 +447,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 >
                   {role === 'admin' ? <ShieldCheck className="w-5 h-5" /> : <UserCheck className="w-5 h-5" />}
                 </button>
-              )}
-
-              {onOpenChangePasswordModal && (
-                <button
-                  onClick={onOpenChangePasswordModal}
-                  className="h-9 w-9 rounded-xl text-slate-400 hover:text-indigo-600 hover:bg-indigo-50 border border-slate-200 flex items-center justify-center transition-colors"
-                  title="Ubah Password"
-                >
-                  <KeyRound className="w-4 h-4" />
-                </button>
-              )}
-
-              <button
-                onClick={logout}
-                className="h-9 w-9 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 border border-slate-200 flex items-center justify-center"
-                title="Keluar (Logout)"
-              >
-                <LogOut className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-        </div>
+              </div>
+            )}
+          </div>
+        )}
       </aside>
     </>
   );
