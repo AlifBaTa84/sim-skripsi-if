@@ -779,6 +779,25 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.warn('DB delete lecturer error', err);
     });
 
+    // Sinkronisasi pembersihan kredensial/akun terdaftar dosen yang dihapus
+    try {
+      const storedUsersRaw = localStorage.getItem('sim_sidang_registered_users_v2');
+      if (storedUsersRaw) {
+        const parsed = JSON.parse(storedUsersRaw);
+        if (Array.isArray(parsed)) {
+          const lecEmail = lecToDelete.email?.toLowerCase();
+          const filtered = parsed.filter(
+            (u: any) =>
+              u.lecturerId !== id &&
+              (!lecEmail || u.email?.toLowerCase() !== lecEmail)
+          );
+          localStorage.setItem('sim_sidang_registered_users_v2', JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to clean registered users for deleted lecturer', e);
+    }
+
     addToast(
       'info',
       'Dosen Dihapus',

@@ -87,8 +87,12 @@ export const MasterPenggunaView: React.FC = () => {
       // Populate from lecturers
       lecturers.forEach((lec) => {
         const email = (lec.email || `${lec.code.toLowerCase()}@univ.ac.id`).toLowerCase();
-        // Check if lecturer is dual-role admin
-        const isDualAdmin = email.includes('ahmad.fauzi') || lec.name.includes('Ahmad Fauzi');
+        // Check if lecturer is dual-role admin (Panitia Sidang)
+        const isDualAdmin =
+          email.includes('ahmad.fauzi') ||
+          lec.name.includes('Ahmad Fauzi') ||
+          email.includes('dian.dharmayanti') ||
+          lec.name.includes('Dian Dharmayanti');
         const roles: ('admin' | 'dosen' | 'mahasiswa')[] = isDualAdmin ? ['admin', 'dosen'] : ['dosen'];
 
         userMap.set(email, {
@@ -141,6 +145,19 @@ export const MasterPenggunaView: React.FC = () => {
             );
             if (!activeMhs) return;
           }
+
+          const isDsn = (u.roles && u.roles.includes('dosen')) || Boolean(u.lecturerId);
+          if (isDsn) {
+            // Pastikan dosen masih aktif di master dosen, jika sudah dihapus jangan dimuat
+            const activeLec = lecturers.some(
+              (l) =>
+                l.id === u.lecturerId ||
+                (l.email && l.email.toLowerCase() === email) ||
+                (l.code && `${l.code.toLowerCase()}@univ.ac.id` === email)
+            );
+            if (!activeLec) return;
+          }
+
           const existing = userMap.get(email);
           userMap.set(email, {
             id: u.id || existing?.id || `usr-${Date.now()}`,
@@ -170,6 +187,19 @@ export const MasterPenggunaView: React.FC = () => {
             );
             if (!activeMhs) return;
           }
+
+          const isDsn = (u.roles && u.roles.includes('dosen')) || Boolean(u.lecturer_id);
+          if (isDsn) {
+            // Pastikan dosen masih aktif di master dosen, jika sudah dihapus jangan dimuat
+            const activeLec = lecturers.some(
+              (l) =>
+                l.id === u.lecturer_id ||
+                (l.email && l.email.toLowerCase() === email) ||
+                (l.code && `${l.code.toLowerCase()}@univ.ac.id` === email)
+            );
+            if (!activeLec) return;
+          }
+
           const existing = userMap.get(email);
           userMap.set(email, {
             ...existing,

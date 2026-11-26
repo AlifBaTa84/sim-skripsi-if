@@ -57,10 +57,19 @@ export class ScheduleDatabaseRepository {
   }
 
   /**
-   * Menghapus Dosen
+   * Menghapus Dosen dan akun pengguna terkait
    */
   public async deleteLecturer(id: string): Promise<void> {
     await dbEngine.delete(STORES.DOSEN, id);
+    try {
+      const allUsers = await dbEngine.getAll<PenggunaRecord>(STORES.PENGGUNA);
+      const user = allUsers.find((u) => u.lecturer_id === id);
+      if (user) {
+        await dbEngine.delete(STORES.PENGGUNA, user.id);
+      }
+    } catch (e) {
+      console.warn('Could not clean user for deleted lecturer', e);
+    }
   }
 
   /**

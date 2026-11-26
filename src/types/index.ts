@@ -145,6 +145,7 @@ export interface User {
   studentNim?: string;     // NIM relasi ke Mahasiswa jika akun mahasiswa
   department?: string;
   avatarUrl?: string;
+  isActive?: boolean;
 }
 
 export interface PasswordValidationResult {
