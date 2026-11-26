@@ -20,23 +20,25 @@ export interface DemoAccount {
 }
 
 export const getActiveDemoAccounts = (): DemoAccount[] => {
-  // 1. Ambil data mahasiswa aktif pertama dari storage
+  // 1. Ambil data mahasiswa aktif dari storage (prioritaskan 10120262 jika tersedia)
   let firstStudent: { nim: string; name: string } | null = null;
   try {
     const savedSchedules = localStorage.getItem('sim_sidang_schedules_v2');
     if (savedSchedules !== null) {
       const parsed: ScheduleItem[] = JSON.parse(savedSchedules);
       if (Array.isArray(parsed) && parsed.length > 0) {
+        const targetMhs = parsed.find((s) => s.nim === '10120262') || parsed[0];
         firstStudent = {
-          nim: parsed[0].nim,
-          name: parsed[0].studentName,
+          nim: targetMhs.nim,
+          name: targetMhs.studentName,
         };
       }
     } else {
-      if (INITIAL_SCHEDULE_ITEMS.length > 0) {
+      const targetMhs = INITIAL_SCHEDULE_ITEMS.find((s) => s.nim === '10120262') || INITIAL_SCHEDULE_ITEMS[0];
+      if (targetMhs) {
         firstStudent = {
-          nim: INITIAL_SCHEDULE_ITEMS[0].nim,
-          name: INITIAL_SCHEDULE_ITEMS[0].studentName,
+          nim: targetMhs.nim,
+          name: targetMhs.studentName,
         };
       }
     }
@@ -68,8 +70,13 @@ export const getActiveDemoAccounts = (): DemoAccount[] => {
       l.name.toLowerCase().includes('ahmad fauzi')
   );
 
-  // Cari dosen penguji murni (yang bukan multi-peran) atau dosen pertama
+  // Cari dosen penguji murni (yang bukan multi-peran)
   const pureLecturer =
+    lecturersList.find(
+      (l) =>
+        l.id !== dualRoleLecturer?.id &&
+        ((l.email && l.email.toLowerCase().includes('andri.heryandi')) || l.name.toLowerCase().includes('andri heryandi'))
+    ) ||
     lecturersList.find((l) => l.id !== dualRoleLecturer?.id) ||
     (lecturersList.length > 0 ? lecturersList[0] : null);
 
@@ -77,7 +84,7 @@ export const getActiveDemoAccounts = (): DemoAccount[] => {
 
   // Akun 1: Dosen & Admin (Multi-Peran)
   if (dualRoleLecturer) {
-    const email = dualRoleLecturer.email || `${dualRoleLecturer.code.toLowerCase()}@email.ac.id`;
+    const email = dualRoleLecturer.email || 'dian.dharmayanti@email.ac.id';
     baseAccounts.push({
       label: 'Dosen & Admin (Multi-Peran)',
       roleBadge: 'Dosen + Admin',
@@ -114,7 +121,7 @@ export const getActiveDemoAccounts = (): DemoAccount[] => {
 
   // Akun 3: Dosen Penguji
   if (pureLecturer) {
-    const email = pureLecturer.email || `${pureLecturer.code.toLowerCase()}@email.ac.id`;
+    const email = pureLecturer.email || 'andri.heryandi@email.ac.id';
     baseAccounts.push({
       label: 'Dosen Penguji',
       roleBadge: 'Dosen Only',
@@ -333,14 +340,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         `${s.nim.toLowerCase()}@mahasiswa.ac.id` === inputClean
     );
 
-    const matchedLecturer = lecturersList.find(
-      (l) =>
-        (l.email && l.email.toLowerCase() === inputClean) ||
-        (l.email && l.email.toLowerCase().replace('@univ.ac.id', '@email.ac.id') === inputClean) ||
-        (l.email && l.email.toLowerCase().replace('@email.ac.id', '@univ.ac.id') === inputClean) ||
-        (l.code && l.code.toLowerCase() === inputClean) ||
-        (l.nidn && l.nidn.toLowerCase() === inputClean)
-    );
+    const matchedLecturer = lecturersList.find((l) => {
+      const lecEmail = (l.email || '').toLowerCase();
+      const lecCode = (l.code || '').toLowerCase();
+      const lecNidn = (l.nidn || '').toLowerCase();
+
+      return (
+        lecEmail === inputClean ||
+        lecEmail.replace('@univ.ac.id', '@email.ac.id') === inputClean ||
+        lecEmail.replace('@email.ac.id', '@univ.ac.id') === inputClean ||
+        `${lecCode}@email.ac.id` === inputClean ||
+        `${lecCode}@univ.ac.id` === inputClean ||
+        lecCode === inputClean ||
+        lecNidn === inputClean
+      );
+    });
 
     const isLecturerFormat =
       inputClean.includes('@univ.ac.id') ||
@@ -357,6 +371,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (isLecturerFormat && !matchedLecturer && !inputClean.includes('admin@simsidang.ac.id')) {
       return null;
     }
+
+    // Helper untuk menjamin passwordHash selalu valid dan tidak pernah kosong/undefined
+    const getResolvedPassword = (u: any, isMhsRole: boolean, nim?: string): string => {
+      if (u.passwordHash && typeof u.passwordHash === 'string' && u.passwordHash.trim()) {
+        return u.passwordHash.trim();
+      }
+      if (u.password_hash && typeof u.password_hash === 'string' && u.password_hash.trim()) {
+        return u.password_hash.trim();
+      }
+      if (isMhsRole) {
+        return `Mhs#${nim || u.studentNim || u.student_nim || '2025'}`;
+      }
+      if (u.roles && u.roles.includes('admin') && !u.roles.includes('dosen')) {
+        return 'Admin#2025';
+      }
+      return 'Dosen#2025';
+    };
 
     // c. Muat pengguna tersimpan dari localStorage jika ada
     let registeredUsers: StoredUser[] = [];
@@ -381,8 +412,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
 
     if (registered) {
-      const isMhs = registered.roles.includes('mahasiswa') || Boolean(registered.studentNim);
-      const isDsn = registered.roles.includes('dosen') || Boolean(registered.lecturerId);
+      const isMhs = (registered.roles && registered.roles.includes('mahasiswa')) || Boolean(registered.studentNim);
+      const isDsn = (registered.roles && registered.roles.includes('dosen')) || Boolean(registered.lecturerId);
 
       if (isMhs) {
         // Hanya kembalikan jika mahasiswa masih aktif di schedulesList
@@ -391,23 +422,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             ...registered,
             name: matchedStudent.studentName,
             department: matchedStudent.studyProgram,
+            passwordHash: getResolvedPassword(registered, true, matchedStudent.nim),
+            isActive: registered.isActive !== false,
           };
         }
         // Mahasiswa telah dihapus, abaikan cache akun
       } else if (isDsn) {
         // Hanya kembalikan jika dosen masih aktif di master dosen
         if (matchedLecturer) {
+          const lecEmail = matchedLecturer.email || registered.email;
+          const isDualAdmin =
+            lecEmail.includes('ahmad.fauzi') ||
+            matchedLecturer.name.includes('Ahmad Fauzi') ||
+            lecEmail.includes('dian.dharmayanti') ||
+            matchedLecturer.name.includes('Dian Dharmayanti') ||
+            (registered.roles && registered.roles.includes('admin'));
+          const roles: UserRole[] = isDualAdmin ? ['admin', 'dosen'] : ['dosen'];
+
           return {
             ...registered,
             name: matchedLecturer.name,
+            email: registered.email || lecEmail,
+            roles: registered.roles && registered.roles.length > 0 ? registered.roles : roles,
+            activeRole: registered.activeRole || (isDualAdmin ? 'admin' : 'dosen'),
             department: matchedLecturer.department,
             lecturerId: matchedLecturer.id,
+            passwordHash: getResolvedPassword(registered, false),
+            isActive: registered.isActive !== false,
           };
         }
         // Dosen telah dihapus, abaikan cache akun
       } else {
         // Akun administrator root
-        return registered;
+        return {
+          ...registered,
+          passwordHash: getResolvedPassword(registered, false),
+          isActive: registered.isActive !== false,
+        };
       }
     }
 
@@ -417,7 +468,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         u.email.toLowerCase() === inputClean ||
         (u.studentNim && u.studentNim.toLowerCase() === inputClean)
     );
-    if (initial) return initial;
+    if (initial) {
+      return {
+        ...initial,
+        passwordHash: getResolvedPassword(initial, false),
+        isActive: initial.isActive !== false,
+      };
+    }
 
     // e. Jika mahasiswa terdaftar aktif di jadwal/antrean, return akun otomatis
     if (matchedStudent) {
@@ -436,7 +493,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // f. Jika dosen terdaftar aktif di master data dosen, return akun otomatis
     if (matchedLecturer) {
-      const email = matchedLecturer.email || `${matchedLecturer.code.toLowerCase()}@univ.ac.id`;
+      const email = matchedLecturer.email || `${matchedLecturer.code.toLowerCase()}@email.ac.id`;
       const isDualAdmin =
         email.includes('ahmad.fauzi') ||
         matchedLecturer.name.includes('Ahmad Fauzi') ||

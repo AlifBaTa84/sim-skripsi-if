@@ -55,12 +55,13 @@ export const LoginPage: React.FC = () => {
     if (account.isAvailable === false) {
       setErrorMessage(
         account.unavailableReason ||
-          'Akun demo mahasiswa tidak tersedia karena data mahasiswa belum diimpor atau telah dihapus. Silakan login sebagai Admin untuk mengelola data.'
+          'Akun demo tidak tersedia karena data terkait belum diimpor atau telah dihapus. Silakan login sebagai Admin untuk mengelola data.'
       );
       return;
     }
     setEmail(account.email);
     setPassword(account.password);
+    setCaptchaInput(expectedCaptcha); // Isi otomatis kode Captcha untuk kemudahan demo 1-klik
     setErrorMessage(null);
   };
 

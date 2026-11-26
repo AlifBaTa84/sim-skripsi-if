@@ -111,7 +111,7 @@ export const INITIAL_LECTURERS: Lecturer[] = [
     name: 'Dian Dharmayanti, S.T., M.Kom.',
     nidn: '0412088501',
     department: 'Teknik Informatika',
-    email: 'dian.dharmayanti@univ.ac.id',
+    email: 'dian.dharmayanti@email.ac.id',
     code: 'DD',
   },
   {
@@ -119,7 +119,7 @@ export const INITIAL_LECTURERS: Lecturer[] = [
     name: 'Andri Heryandi, S.T., M.T.',
     nidn: '0420057802',
     department: 'Teknik Informatika',
-    email: 'andri.heryandi@univ.ac.id',
+    email: 'andri.heryandi@email.ac.id',
     code: 'AH',
   },
   {
@@ -127,7 +127,7 @@ export const INITIAL_LECTURERS: Lecturer[] = [
     name: 'Chrismikha Hardyanto, M.Kom.',
     nidn: '0415118903',
     department: 'Sistem Informasi',
-    email: 'chrismikha.hardyanto@univ.ac.id',
+    email: 'chrismikha.hardyanto@email.ac.id',
     code: 'CH',
   },
   {
@@ -135,7 +135,7 @@ export const INITIAL_LECTURERS: Lecturer[] = [
     name: 'Iskandar Ikbal, M.Kom.',
     nidn: '0403068201',
     department: 'Teknik Informatika',
-    email: 'iskandar.ikbal@univ.ac.id',
+    email: 'iskandar.ikbal@email.ac.id',
     code: 'II',
   },
   {
@@ -143,7 +143,7 @@ export const INITIAL_LECTURERS: Lecturer[] = [
     name: 'Sopian Alviana, M.Kom.',
     nidn: '0428098004',
     department: 'Teknik Informatika',
-    email: 'sopian.alviana@univ.ac.id',
+    email: 'sopian.alviana@email.ac.id',
     code: 'SA',
   },
   {
@@ -151,7 +151,7 @@ export const INITIAL_LECTURERS: Lecturer[] = [
     name: 'Angga Setiyadi, M.Kom., CITPM',
     nidn: '0419018402',
     department: 'Sistem Informasi',
-    email: 'angga.setiyadi@univ.ac.id',
+    email: 'angga.setiyadi@email.ac.id',
     code: 'AS',
   },
   {
@@ -159,7 +159,7 @@ export const INITIAL_LECTURERS: Lecturer[] = [
     name: 'Dr. Marliana Budhiningtias, M.Si.',
     nidn: '0405027501',
     department: 'Teknik Informatika',
-    email: 'marliana.b@univ.ac.id',
+    email: 'marliana.b@email.ac.id',
     code: 'MB',
   },
   {
@@ -167,7 +167,7 @@ export const INITIAL_LECTURERS: Lecturer[] = [
     name: 'Taufiq Nurhadi, S.Kom., M.T.',
     nidn: '0423078802',
     department: 'Sistem Komputer',
-    email: 'taufiq.nurhadi@univ.ac.id',
+    email: 'taufiq.nurhadi@email.ac.id',
     code: 'TN',
   },
 ];

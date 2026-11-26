@@ -223,18 +223,28 @@ export const MasterPenggunaView: React.FC = () => {
   // Sync to localStorage
   const syncToLocalStorage = (usersList: PenggunaRecord[]) => {
     try {
-      const localFormat = usersList.map((u) => ({
-        id: u.id,
-        name: u.nama,
-        email: u.email,
-        roles: u.roles,
-        activeRole: u.role_utama,
-        isActive: u.is_active,
-        studentNim: u.student_nim,
-        lecturerId: u.lecturer_id,
-        updatedAt: u.updated_at,
-        createdAt: u.created_at,
-      }));
+      const localFormat = usersList.map((u) => {
+        const defaultPwd =
+          u.roles.includes('admin') && !u.roles.includes('dosen')
+            ? 'Admin#2025'
+            : u.roles.includes('mahasiswa')
+            ? `Mhs#${u.student_nim || '2025'}`
+            : 'Dosen#2025';
+
+        return {
+          id: u.id,
+          name: u.nama,
+          email: u.email,
+          roles: u.roles,
+          activeRole: u.role_utama,
+          passwordHash: u.password_hash || defaultPwd,
+          isActive: u.is_active,
+          studentNim: u.student_nim,
+          lecturerId: u.lecturer_id,
+          updatedAt: u.updated_at,
+          createdAt: u.created_at,
+        };
+      });
       localStorage.setItem('sim_sidang_registered_users_v2', JSON.stringify(localFormat));
     } catch (e) {
       console.error('Failed to sync to localStorage:', e);
