@@ -15,42 +15,91 @@ export interface DemoAccount {
   password: string;
   description: string;
   roles: UserRole[];
+  isAvailable?: boolean;
+  unavailableReason?: string;
 }
 
-export const DEMO_ACCOUNTS: DemoAccount[] = [
-  {
-    label: 'Dosen & Admin (Multi-Peran)',
-    roleBadge: 'Dosen + Admin',
-    email: 'dian.dharmayanti@email.ac.id',
-    password: 'Dosen#2025',
-    description: 'Dosen Penguji 1 sekaligus Panitia Sidang (Bisa beralih peran bebas)',
-    roles: ['dosen', 'admin'],
-  },
-  {
-    label: 'Administrator Utama',
-    roleBadge: 'Admin Only',
-    email: 'admin@simsidang.ac.id',
-    password: 'Admin#2025',
-    description: 'Akses penuh jadwal matriks, kelola ruangan & slot waktu',
-    roles: ['admin'],
-  },
-  {
-    label: 'Dosen Penguji',
-    roleBadge: 'Dosen Only',
-    email: 'andri.heryandi@email.ac.id',
-    password: 'Dosen#2025',
-    description: 'Akses jadwal personal dan jadwal lengkap (Read-Only)',
-    roles: ['dosen'],
-  },
-  {
-    label: 'Mahasiswa Peserta Sidang',
-    roleBadge: 'Mahasiswa',
-    email: '10120262@mahasiswa.ac.id',
-    password: 'Mhs#10120262',
-    description: 'Melihat jadwal pribadi dan cetak 3 slip label draft skripsi',
-    roles: ['mahasiswa'],
-  },
-];
+export const getActiveDemoAccounts = (): DemoAccount[] => {
+  let firstStudent: { nim: string; name: string } | null = null;
+  try {
+    const savedSchedules = localStorage.getItem('sim_sidang_schedules_v2');
+    if (savedSchedules !== null) {
+      const parsed: ScheduleItem[] = JSON.parse(savedSchedules);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        firstStudent = {
+          nim: parsed[0].nim,
+          name: parsed[0].studentName,
+        };
+      }
+    } else {
+      if (INITIAL_SCHEDULE_ITEMS.length > 0) {
+        firstStudent = {
+          nim: INITIAL_SCHEDULE_ITEMS[0].nim,
+          name: INITIAL_SCHEDULE_ITEMS[0].studentName,
+        };
+      }
+    }
+  } catch (e) {
+    console.error('Failed to get student for demo accounts', e);
+  }
+
+  const baseAccounts: DemoAccount[] = [
+    {
+      label: 'Dosen & Admin (Multi-Peran)',
+      roleBadge: 'Dosen + Admin',
+      email: 'dian.dharmayanti@email.ac.id',
+      password: 'Dosen#2025',
+      description: 'Dosen Penguji 1 sekaligus Panitia Sidang (Bisa beralih peran bebas)',
+      roles: ['dosen', 'admin'],
+      isAvailable: true,
+    },
+    {
+      label: 'Administrator Utama',
+      roleBadge: 'Admin Only',
+      email: 'admin@simsidang.ac.id',
+      password: 'Admin#2025',
+      description: 'Akses penuh jadwal matriks, kelola ruangan & slot waktu',
+      roles: ['admin'],
+      isAvailable: true,
+    },
+    {
+      label: 'Dosen Penguji',
+      roleBadge: 'Dosen Only',
+      email: 'andri.heryandi@email.ac.id',
+      password: 'Dosen#2025',
+      description: 'Akses jadwal personal dan jadwal lengkap (Read-Only)',
+      roles: ['dosen'],
+      isAvailable: true,
+    },
+  ];
+
+  if (firstStudent) {
+    baseAccounts.push({
+      label: 'Mahasiswa Peserta Sidang',
+      roleBadge: 'Mahasiswa',
+      email: `${firstStudent.nim}@mahasiswa.ac.id`,
+      password: `Mhs#${firstStudent.nim}`,
+      description: `${firstStudent.name} (${firstStudent.nim})`,
+      roles: ['mahasiswa'],
+      isAvailable: true,
+    });
+  } else {
+    baseAccounts.push({
+      label: 'Mahasiswa Peserta Sidang',
+      roleBadge: 'Data Kosong',
+      email: 'Data Mahasiswa Kosong',
+      password: '',
+      description: 'Belum ada data mahasiswa terdaftar atau data telah dihapus',
+      roles: ['mahasiswa'],
+      isAvailable: false,
+      unavailableReason: 'Data mahasiswa tidak tersedia di sistem (telah dihapus atau belum diimpor). Silakan login sebagai Admin untuk mengimpor data.',
+    });
+  }
+
+  return baseAccounts;
+};
+
+export const DEMO_ACCOUNTS: DemoAccount[] = getActiveDemoAccounts();
 
 // Seed users database
 export interface StoredUser extends User {
@@ -97,26 +146,6 @@ const INITIAL_USERS: StoredUser[] = [
     lecturerId: 'lec-3',
     department: 'Teknik Informatika',
   },
-  {
-    id: 'usr-5',
-    name: 'SHANIA NUR LUTHFIA',
-    email: '10120262@mahasiswa.ac.id',
-    passwordHash: 'Mhs#10120262',
-    roles: ['mahasiswa'],
-    activeRole: 'mahasiswa',
-    studentNim: '10120262',
-    department: 'Teknik Informatika',
-  },
-  {
-    id: 'usr-6',
-    name: 'NURUL AMALIA',
-    email: '10120264@mahasiswa.ac.id',
-    passwordHash: 'Mhs#10120264',
-    roles: ['mahasiswa'],
-    activeRole: 'mahasiswa',
-    studentNim: '10120264',
-    department: 'Teknik Informatika',
-  },
 ];
 
 const AUTH_STORAGE_KEY = 'sim_sidang_auth_user_v2';
@@ -159,6 +188,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           parsed.roles.length > 0 &&
           parsed.activeRole
         ) {
+          // Jika akun tersimpan adalah mahasiswa, validasi keberadaannya di data mahasiswa aktif
+          if (parsed.activeRole === 'mahasiswa' || parsed.studentNim) {
+            const savedSchedules = localStorage.getItem('sim_sidang_schedules_v2');
+            if (savedSchedules !== null) {
+              const schedulesList: ScheduleItem[] = JSON.parse(savedSchedules);
+              const exists = Array.isArray(schedulesList) && schedulesList.some(
+                (s) =>
+                  s.nim === parsed.studentNim ||
+                  `${s.nim.toLowerCase()}@mahasiswa.ac.id` === parsed.email.toLowerCase()
+              );
+              if (!exists) {
+                localStorage.removeItem(AUTH_STORAGE_KEY);
+                return null;
+              }
+            }
+          }
           return parsed;
         }
       }
@@ -185,11 +230,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   /**
    * Helper pencarian akun terpadu (memeriksa registered users, initial users,
    * antrean mahasiswa dinamis, dan master data dosen dinamis).
+   * Menegakkan aturan Automatic Account Provisioning:
+   * Akun mahasiswa HANYA valid bila data mahasiswa aktif ada di sistem.
    */
   const findUserAccount = (identifier: string): StoredUser | null => {
     const inputClean = identifier.trim().toLowerCase();
+    const isStudentFormat = inputClean.includes('@mahasiswa.ac.id') || /^[0-9]+$/.test(inputClean);
 
-    // a. Muat pengguna tersimpan dari localStorage jika ada
+    // a. Muat daftar jadwal / mahasiswa aktif dari localStorage
+    let schedulesList: ScheduleItem[] = [];
+    const savedSchedules = localStorage.getItem('sim_sidang_schedules_v2');
+    if (savedSchedules !== null) {
+      try {
+        const parsed = JSON.parse(savedSchedules);
+        if (Array.isArray(parsed)) {
+          schedulesList = parsed;
+        }
+      } catch (e) {
+        console.error('Failed to parse saved schedules', e);
+      }
+    } else {
+      // First run sebelum ada modifikasi data jadwal
+      schedulesList = INITIAL_SCHEDULE_ITEMS;
+    }
+
+    const matchedStudent = schedulesList.find(
+      (s) =>
+        s.nim.toLowerCase() === inputClean ||
+        `${s.nim.toLowerCase()}@mahasiswa.ac.id` === inputClean
+    );
+
+    // Jika format input adalah mahasiswa tapi datanya tidak ditemukan (kosong atau telah dihapus),
+    // tolak akses akun mahasiswa secara mutlak.
+    if (isStudentFormat && !matchedStudent) {
+      return null;
+    }
+
+    // b. Muat pengguna tersimpan dari localStorage jika ada
     let registeredUsers: StoredUser[] = [];
     try {
       const storedUsersRaw = localStorage.getItem('sim_sidang_registered_users_v2');
@@ -209,9 +286,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         u.email.toLowerCase() === inputClean ||
         (u.studentNim && u.studentNim.toLowerCase() === inputClean)
     );
-    if (registered) return registered;
 
-    // b. Cari di daftar seed INITIAL_USERS
+    if (registered) {
+      const isMhs = registered.roles.includes('mahasiswa') || Boolean(registered.studentNim);
+      if (isMhs) {
+        // Hanya kembalikan jika mahasiswa masih aktif di schedulesList
+        if (matchedStudent) {
+          return {
+            ...registered,
+            name: matchedStudent.studentName,
+            department: matchedStudent.studyProgram,
+          };
+        }
+        // Jika data mahasiswa sudah dihapus dari sistem, abaikan cache akun terdaftar
+      } else {
+        return registered;
+      }
+    }
+
+    // c. Cari di daftar seed INITIAL_USERS (hanya akun admin dan dosen inti)
     const initial = INITIAL_USERS.find(
       (u) =>
         u.email.toLowerCase() === inputClean ||
@@ -219,23 +312,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     );
     if (initial) return initial;
 
-    // c. Cari apakah merupakan mahasiswa yang terdaftar di jadwal/antrean
-    let schedulesList: ScheduleItem[] = INITIAL_SCHEDULE_ITEMS;
-    try {
-      const savedSchedules = localStorage.getItem('sim_sidang_schedules_v2');
-      if (savedSchedules) {
-        schedulesList = JSON.parse(savedSchedules);
-      }
-    } catch (e) {
-      console.error(e);
-    }
-
-    const matchedStudent = schedulesList.find(
-      (s) =>
-        s.nim.toLowerCase() === inputClean ||
-        `${s.nim.toLowerCase()}@mahasiswa.ac.id` === inputClean
-    );
-
+    // d. Jika mahasiswa terdaftar aktif di jadwal/antrean, return akun otomatis
     if (matchedStudent) {
       return {
         id: `usr-mhs-${matchedStudent.nim}`,
@@ -249,7 +326,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       };
     }
 
-    // d. Cari apakah merupakan dosen di master data (membaca localStorage dinamis, fallback ke INITIAL_LECTURERS)
+    // e. Cari apakah merupakan dosen di master data (membaca localStorage dinamis, fallback ke INITIAL_LECTURERS)
     let lecturersList: Lecturer[] = INITIAL_LECTURERS;
     try {
       const savedLecturers = localStorage.getItem('sim_sidang_lecturers_v2');
@@ -328,9 +405,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const user = findUserAccount(email);
 
       if (!user) {
+        const isStudentIdentifier = email.toLowerCase().includes('@mahasiswa.ac.id') || /^[0-9]+$/.test(email.trim());
         return { 
           success: false, 
-          error: 'Akun dengan alamat email atau NIM ini tidak terdaftar. Pastikan data sudah ditambahkan di Data Master.' 
+          error: isStudentIdentifier
+            ? 'Akun mahasiswa tidak ditemukan. Data mahasiswa tidak terdaftar atau telah dihapus dari sistem.'
+            : 'Akun dengan alamat email atau NIM ini tidak terdaftar. Pastikan data sudah ditambahkan di Data Master.' 
         };
       }
 

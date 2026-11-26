@@ -133,11 +133,19 @@ export const MasterPenggunaView: React.FC = () => {
       localUsers.forEach((u) => {
         const email = u.email?.toLowerCase();
         if (email) {
+          const isMhs = (u.roles && u.roles.includes('mahasiswa')) || Boolean(u.studentNim) || email.includes('@mahasiswa.ac.id');
+          if (isMhs) {
+            // Pastikan mahasiswa masih aktif di data schedules, jika sudah dihapus jangan dimuat
+            const activeMhs = schedules.some(
+              (s) => s.nim === u.studentNim || `${s.nim.toLowerCase()}@mahasiswa.ac.id` === email
+            );
+            if (!activeMhs) return;
+          }
           const existing = userMap.get(email);
           userMap.set(email, {
             id: u.id || existing?.id || `usr-${Date.now()}`,
-            email,
             nama: u.name || existing?.nama || 'Pengguna',
+            email,
             roles: Array.isArray(u.roles) && u.roles.length > 0 ? u.roles : existing?.roles || ['mahasiswa'],
             role_utama: u.activeRole || existing?.role_utama || (Array.isArray(u.roles) ? u.roles[0] : 'mahasiswa'),
             password_required: u.passwordRequired !== undefined ? u.passwordRequired : false,
@@ -154,6 +162,14 @@ export const MasterPenggunaView: React.FC = () => {
       dbUsers.forEach((u) => {
         const email = u.email?.toLowerCase();
         if (email) {
+          const isMhs = (u.roles && u.roles.includes('mahasiswa')) || Boolean(u.student_nim) || email.includes('@mahasiswa.ac.id');
+          if (isMhs) {
+            // Pastikan mahasiswa masih aktif di data schedules, jika sudah dihapus jangan dimuat
+            const activeMhs = schedules.some(
+              (s) => s.nim === u.student_nim || `${s.nim.toLowerCase()}@mahasiswa.ac.id` === email
+            );
+            if (!activeMhs) return;
+          }
           const existing = userMap.get(email);
           userMap.set(email, {
             ...existing,

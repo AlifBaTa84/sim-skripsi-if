@@ -802,6 +802,24 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       console.warn('DB delete student error', err);
     });
 
+    // Sinkronisasi pembersihan kredensial/akun terdaftar mahasiswa yang dihapus
+    try {
+      const storedUsersRaw = localStorage.getItem('sim_sidang_registered_users_v2');
+      if (storedUsersRaw) {
+        const parsed = JSON.parse(storedUsersRaw);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter(
+            (u: any) =>
+              u.studentNim !== target.nim &&
+              u.email?.toLowerCase() !== `${target.nim.toLowerCase()}@mahasiswa.ac.id`
+          );
+          localStorage.setItem('sim_sidang_registered_users_v2', JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to clean registered users for deleted student', e);
+    }
+
     addToast(
       'success',
       'Data Mahasiswa Dihapus',
@@ -823,6 +841,25 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     dbRepository.deleteStudentsBulk(targets.map(t => ({ id: t.id, nim: t.nim }))).catch(err => {
       console.warn('DB bulk delete student error', err);
     });
+
+    // Sinkronisasi pembersihan kredensial/akun terdaftar mahasiswa yang dihapus massal
+    try {
+      const targetNims = new Set(targets.map(t => t.nim.toLowerCase()));
+      const storedUsersRaw = localStorage.getItem('sim_sidang_registered_users_v2');
+      if (storedUsersRaw) {
+        const parsed = JSON.parse(storedUsersRaw);
+        if (Array.isArray(parsed)) {
+          const filtered = parsed.filter((u: any) => {
+            const nim = u.studentNim?.toLowerCase();
+            const emailNim = u.email?.toLowerCase().replace('@mahasiswa.ac.id', '');
+            return !targetNims.has(nim) && !targetNims.has(emailNim);
+          });
+          localStorage.setItem('sim_sidang_registered_users_v2', JSON.stringify(filtered));
+        }
+      }
+    } catch (e) {
+      console.error('Failed to clean registered users for bulk deleted students', e);
+    }
 
     addToast(
       'success',

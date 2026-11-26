@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth, DEMO_ACCOUNTS, DemoAccount } from '../../context/AuthContext';
+import { useAuth, getActiveDemoAccounts, DemoAccount } from '../../context/AuthContext';
 import { generateCaptchaText } from '../../utils/authValidator';
 import { CaptchaCanvas } from './CaptchaCanvas';
 import {
@@ -31,6 +31,11 @@ export const LoginPage: React.FC = () => {
   const [expectedCaptcha, setExpectedCaptcha] = useState(() => generateCaptchaText(5));
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>(() => getActiveDemoAccounts());
+
+  useEffect(() => {
+    setDemoAccounts(getActiveDemoAccounts());
+  }, []);
 
   // Generate new captcha
   const handleRefreshCaptcha = () => {
@@ -47,6 +52,13 @@ export const LoginPage: React.FC = () => {
 
   // Handle Demo Account 1-Click Fill
   const handleSelectDemo = (account: DemoAccount) => {
+    if (account.isAvailable === false) {
+      setErrorMessage(
+        account.unavailableReason ||
+          'Akun demo mahasiswa tidak tersedia karena data mahasiswa belum diimpor atau telah dihapus. Silakan login sebagai Admin untuk mengelola data.'
+      );
+      return;
+    }
     setEmail(account.email);
     setPassword(account.password);
     setErrorMessage(null);
@@ -306,32 +318,44 @@ export const LoginPage: React.FC = () => {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-              {DEMO_ACCOUNTS.map((acc) => (
-                <button
-                  key={acc.email}
-                  type="button"
-                  onClick={() => handleSelectDemo(acc)}
-                  className="text-left p-2.5 rounded-xl border border-slate-200/80 bg-slate-50/70 hover:bg-indigo-50/60 hover:border-indigo-200 transition-all group"
-                >
-                  <div className="flex items-center justify-between gap-1 mb-1">
-                    <span className="text-xs font-bold text-slate-800 group-hover:text-indigo-700 truncate">
-                      {acc.label}
-                    </span>
-                    <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded border ${
-                      acc.roles.includes('admin') && acc.roles.includes('dosen')
-                        ? 'bg-purple-50 text-purple-700 border-purple-200'
-                        : acc.roles.includes('admin')
-                        ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                        : acc.roles.includes('dosen')
-                        ? 'bg-blue-50 text-blue-700 border-blue-200'
-                        : 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                    }`}>
-                      {acc.roleBadge}
-                    </span>
-                  </div>
-                  <p className="text-[10px] text-slate-400 font-mono truncate">{acc.email}</p>
-                </button>
-              ))}
+              {demoAccounts.map((acc) => {
+                const isAvail = acc.isAvailable !== false;
+                return (
+                  <button
+                    key={acc.label + acc.email}
+                    type="button"
+                    onClick={() => handleSelectDemo(acc)}
+                    title={!isAvail ? acc.unavailableReason : undefined}
+                    className={`text-left p-2.5 rounded-xl border transition-all group ${
+                      isAvail
+                        ? 'border-slate-200/80 bg-slate-50/70 hover:bg-indigo-50/60 hover:border-indigo-200 cursor-pointer'
+                        : 'border-slate-200 border-dashed bg-slate-100/50 hover:bg-slate-100 cursor-pointer opacity-75'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between gap-1 mb-1">
+                      <span className={`text-xs font-bold truncate ${isAvail ? 'text-slate-800 group-hover:text-indigo-700' : 'text-slate-500'}`}>
+                        {acc.label}
+                      </span>
+                      <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded border ${
+                        !isAvail
+                          ? 'bg-slate-100 text-slate-500 border-slate-300'
+                          : acc.roles.includes('admin') && acc.roles.includes('dosen')
+                          ? 'bg-purple-50 text-purple-700 border-purple-200'
+                          : acc.roles.includes('admin')
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                          : acc.roles.includes('dosen')
+                          ? 'bg-blue-50 text-blue-700 border-blue-200'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}>
+                        {acc.roleBadge}
+                      </span>
+                    </div>
+                    <p className={`text-[10px] font-mono truncate ${isAvail ? 'text-slate-400' : 'text-slate-400 italic'}`}>
+                      {acc.email}
+                    </p>
+                  </button>
+                );
+              })}
             </div>
 
             {/* Info Akun yang Baru Ditambahkan */}
