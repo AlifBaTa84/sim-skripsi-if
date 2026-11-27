@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useSchedule } from '../../context/ScheduleContext';
+import { ScheduleItem } from '../../types';
 import { 
   GraduationCap, 
   Calendar, 
@@ -11,8 +12,7 @@ import {
   BookOpen, 
   Users, 
   FileCheck, 
-  ShieldCheck,
-  Lock
+  ShieldCheck
 } from 'lucide-react';
 import { formatIndonesianDate } from '../../utils/formatters';
 import { PrintDraftLabelModal } from './PrintDraftLabelModal';
@@ -26,7 +26,7 @@ export const MahasiswaView: React.FC = () => {
     timeSlots 
   } = useSchedule();
 
-  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printTargetItem, setPrintTargetItem] = useState<ScheduleItem | null>(null);
 
   // Ambil semua agenda milik mahasiswa berdasarkan NIM aktif
   const studentItems = currentStudentNim
@@ -141,11 +141,20 @@ export const MahasiswaView: React.FC = () => {
           </div>
         </div>
 
-        {/* Print Button (hanya untuk jadwal sidang yang terjadwal / selesai) */}
-        <div className="flex items-center shrink-0">
+        {/* Print Buttons (muncul jika sudah terjadwal pada papan jadwal) */}
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          {seminarItem && isSeminarScheduled && (
+            <button
+              onClick={() => setPrintTargetItem(seminarItem)}
+              className="flex items-center gap-2 h-10 px-4 text-sm font-semibold text-white bg-emerald-600 hover:bg-emerald-700 rounded-xl shadow-md shadow-emerald-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              <Printer className="w-4 h-4" />
+              <span>Cetak Label Draft Seminar</span>
+            </button>
+          )}
           {sidangItem && (isSidangScheduled || isSidangCompleted) && (
             <button
-              onClick={() => setIsPrintModalOpen(true)}
+              onClick={() => setPrintTargetItem(sidangItem)}
               className="flex items-center gap-2 h-10 px-5 text-sm font-semibold text-white bg-indigo-600 hover:bg-indigo-700 rounded-xl shadow-md shadow-indigo-600/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
             >
               <Printer className="w-4 h-4" />
@@ -248,14 +257,24 @@ export const MahasiswaView: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Thesis Title Box */}
-                  <div className="mt-6">
-                    <span className="text-[11px] uppercase font-bold text-emerald-300 tracking-wider">
-                      Judul Proposal / Seminar:
-                    </span>
-                    <p className="text-sm font-medium text-white leading-relaxed mt-1">
-                      &ldquo;{seminarItem.thesisTitle}&rdquo;
-                    </p>
+                  {/* Thesis Title Box + Cetak Label Seminar */}
+                  <div className="mt-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+                    <div className="space-y-1 max-w-2xl">
+                      <span className="text-[11px] uppercase font-bold text-emerald-300 tracking-wider">
+                        Judul Proposal / Seminar:
+                      </span>
+                      <p className="text-sm font-medium text-white leading-relaxed">
+                        &ldquo;{seminarItem.thesisTitle}&rdquo;
+                      </p>
+                    </div>
+
+                    <button
+                      onClick={() => setPrintTargetItem(seminarItem)}
+                      className="shrink-0 flex items-center gap-2 h-10 px-5 rounded-xl bg-white text-emerald-900 font-semibold text-sm hover:bg-emerald-50 shadow-md transition-colors"
+                    >
+                      <Printer className="w-4 h-4 text-emerald-600" />
+                      <span>Cetak Label Draft Seminar</span>
+                    </button>
                   </div>
                 </div>
               </div>
@@ -379,7 +398,9 @@ export const MahasiswaView: React.FC = () => {
 
       {/* ═══════════════════════════════════════════════════════════════════════
           BAGIAN 2: INFORMASI SIDANG SKRIPSI
+          Hanya ditampilkan jika sudah dijadwalkan di papan jadwal sidang (scheduled / completed)
       ═══════════════════════════════════════════════════════════════════════ */}
+      {sidangItem && (isSidangScheduled || isSidangCompleted) && (
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-2 px-1">
           <div className="flex items-center gap-2.5">
@@ -393,9 +414,7 @@ export const MahasiswaView: React.FC = () => {
           </div>
         </div>
 
-        {sidangItem ? (
-          isSidangScheduled || isSidangCompleted ? (
-            <div className="space-y-6">
+        <div className="space-y-6">
               {/* Main Schedule Spotlight Card Sidang */}
               <div className="bg-gradient-to-br from-indigo-900 via-indigo-800 to-slate-900 rounded-2xl p-6 md:p-7 text-white shadow-lg relative overflow-hidden">
                 <div className="absolute right-0 top-0 w-96 h-96 bg-white/5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 pointer-events-none" />
@@ -477,7 +496,7 @@ export const MahasiswaView: React.FC = () => {
                     </div>
 
                     <button
-                      onClick={() => setIsPrintModalOpen(true)}
+                      onClick={() => setPrintTargetItem(sidangItem)}
                       className="shrink-0 flex items-center gap-2 h-10 px-5 rounded-xl bg-white text-indigo-900 font-semibold text-sm hover:bg-indigo-50 shadow-md transition-colors"
                     >
                       <Printer className="w-4 h-4 text-indigo-600" />
@@ -608,60 +627,19 @@ export const MahasiswaView: React.FC = () => {
                   </div>
                 </div>
               </div>
-            </div>
-          ) : (
-            /* Unassigned Sidang State */
-            <div className="bg-white rounded-2xl p-8 border border-slate-200 shadow-sm text-center space-y-4">
-              <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto">
-                <AlertCircle className="w-7 h-7" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">
-                  Jadwal Sidang Sedang Disusun oleh Panitia
-                </h3>
-                <p className="text-sm text-slate-500 max-w-md mx-auto mt-1 leading-relaxed">
-                  Pengajuan sidang Anda telah terdaftar. Panitia sedang menyusun matriks slot waktu dan ruangan agar bebas dari bentrok jadwal.
-                </p>
-              </div>
-
-              <div className="max-w-md mx-auto p-4 rounded-xl bg-slate-50 border border-slate-200 text-left text-sm space-y-2">
-                <div className="font-bold text-slate-800">Status Pengajuan Sidang:</div>
-                <div className="text-slate-600">• Judul: &ldquo;{sidangItem.thesisTitle}&rdquo;</div>
-                <div className="text-slate-600">• Penguji 1 (Ketua): {p1?.name || sidangItem.reviewerName || '-'}</div>
-                <div className="text-slate-600">• Penguji 2 (Pembimbing): {p2?.name || sidangItem.advisorName || '-'}</div>
-                <div className="text-slate-600">• Penguji 3: {p3?.name || 'Belum Ditentukan'}</div>
-              </div>
-
-              <p className="text-xs text-slate-400">
-                * Silakan cek kembali secara berkala atau hubungi bagian tata usaha program studi.
-              </p>
-            </div>
-          )
-        ) : (
-          /* Belum Lulus Seminar -> Sidang Belum Terbuka */
-          <div className="bg-slate-50 rounded-2xl p-6 border border-slate-200/80 flex items-start gap-4">
-            <div className="w-11 h-11 rounded-xl bg-slate-200/80 text-slate-600 flex items-center justify-center shrink-0">
-              <Lock className="w-5 h-5" />
-            </div>
-            <div>
-              <h4 className="text-sm font-bold text-slate-900">Pengajuan Sidang Skripsi Belum Dibuka</h4>
-              <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-                Sesuai aturan akademik Program Studi Teknik Informatika, Anda wajib menyelesaikan dan dinyatakan <strong>Lulus Seminar Proposal/Kemajuan</strong> terlebih dahulu sebelum dijadwalkan untuk Sidang Skripsi.
-              </p>
-            </div>
-          </div>
-        )}
+        </div>
       </div>
+      )}
 
-      {/* Printable Label Modal (Hanya untuk Sidang) */}
-      {sidangItem && (
+      {/* Printable Label Modal (Seminar maupun Sidang) */}
+      {printTargetItem && (
         <PrintDraftLabelModal
-          item={sidangItem}
+          item={printTargetItem}
           lecturers={lecturers}
           rooms={rooms}
           timeSlots={timeSlots}
-          isOpen={isPrintModalOpen}
-          onClose={() => setIsPrintModalOpen(false)}
+          isOpen={!!printTargetItem}
+          onClose={() => setPrintTargetItem(null)}
         />
       )}
 

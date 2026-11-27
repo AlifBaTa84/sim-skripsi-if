@@ -29,31 +29,49 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
   const p1 = lecturerMap.get(item.examiner1Id);
   const p2 = lecturerMap.get(item.examiner2Id);
   const p3 = lecturerMap.get(item.examiner3Id);
+  const isSeminar = item.activityType === 'seminar';
 
   const formattedDate = formatIndonesianDate(item.date, true); // e.g. "SABTU, 2-AGUSTUS-2025"
-  const roomName = room ? room.name : 'R6028';
-  const slotLabel = slot ? slot.label : '09.15-10.30';
+  const roomName = room ? room.name : '-';
+  const slotLabel = slot ? slot.label : '-';
 
-  const labelsData = [
-    {
-      examinerName: p1?.name || 'Dian Dharmayanti, S.T., M.Kom.',
-      examinerRole: 'PENGUJI 1 (KETUA)',
-      examinerNidn: p1?.nidn || '0412088501',
-      badgeColor: 'border-indigo-600 text-indigo-900',
-    },
-    {
-      examinerName: p2?.name || 'Andri Heryandi, S.T., M.T.',
-      examinerRole: 'PENGUJI 2 (ANGGOTA)',
-      examinerNidn: p2?.nidn || '0420057802',
-      badgeColor: 'border-sky-600 text-sky-900',
-    },
-    {
-      examinerName: p3?.name || 'Chrismikha Hardyanto, M.Kom.',
-      examinerRole: 'PENGUJI 3 (ANGGOTA)',
-      examinerNidn: p3?.nidn || '0415118903',
-      badgeColor: 'border-teal-600 text-teal-900',
-    },
-  ];
+  const labelsData = isSeminar
+    ? [
+        {
+          examinerName: p1?.name || item.reviewerName || '-',
+          examinerRole: 'DOSEN REVIEWER SEMINAR',
+          examinerNidn: p1?.nidn || '-',
+          badgeColor: 'border-emerald-600 text-emerald-900',
+        },
+        {
+          examinerName: p2?.name || item.advisorName || '-',
+          examinerRole: 'DOSEN PEMBIMBING',
+          examinerNidn: p2?.nidn || '-',
+          badgeColor: 'border-sky-600 text-sky-900',
+        },
+      ]
+    : [
+        {
+          examinerName: p1?.name || item.reviewerName || '-',
+          examinerRole: 'PENGUJI 1 (KETUA)',
+          examinerNidn: p1?.nidn || '-',
+          badgeColor: 'border-indigo-600 text-indigo-900',
+        },
+        {
+          examinerName: p2?.name || item.advisorName || '-',
+          examinerRole: 'PENGUJI 2 (ANGGOTA)',
+          examinerNidn: p2?.nidn || '-',
+          badgeColor: 'border-sky-600 text-sky-900',
+        },
+        {
+          examinerName: p3?.name || '-',
+          examinerRole: 'PENGUJI 3 (ANGGOTA)',
+          examinerNidn: p3?.nidn || '-',
+          badgeColor: 'border-teal-600 text-teal-900',
+        },
+      ];
+
+  const totalLabels = labelsData.length;
 
   const handlePrint = () => {
     window.print();
@@ -75,10 +93,12 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-                Preview Cetak Label Draft Sidang Skripsi
+                {isSeminar ? 'Preview Cetak Label Draft Seminar' : 'Preview Cetak Label Draft Sidang Skripsi'}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
-                3 Label identitas resmi UNIKOM untuk disematkan pada jilid draft skripsi penguji
+                {isSeminar
+                  ? `${totalLabels} Label identitas resmi UNIKOM untuk disematkan pada jilid draft seminar proposal/kemajuan`
+                  : `${totalLabels} Label identitas resmi UNIKOM untuk disematkan pada jilid draft skripsi penguji`}
               </p>
             </div>
           </div>
@@ -89,7 +109,7 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
               className="m3-btn-primary"
             >
               <Printer className="w-4 h-4" />
-              <span>Cetak 3 Label Sekarang</span>
+              <span>Cetak {totalLabels} Label Sekarang</span>
             </button>
             <button
               onClick={onClose}
@@ -104,7 +124,9 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
         <div className="px-6 py-3 bg-amber-50 border-b border-amber-200/60 text-xs text-amber-800 flex items-center gap-2 print:hidden">
           <Scissors className="w-4 h-4 text-amber-600 shrink-0" />
           <span>
-            Potong label sepanjang garis putus-putus dan tempelkan pada bagian depan map/jilid draft skripsi masing-masing dosen penguji.
+            {isSeminar
+              ? 'Potong label sepanjang garis putus-putus dan tempelkan pada bagian depan map/jilid draft seminar masing-masing dosen pembimbing & reviewer.'
+              : 'Potong label sepanjang garis putus-putus dan tempelkan pada bagian depan map/jilid draft skripsi masing-masing dosen penguji.'}
           </span>
         </div>
 
@@ -119,7 +141,7 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
               {/* Cutting Line Indicator */}
               <div className="absolute -top-3 left-6 bg-white px-2 text-[10px] text-slate-400 font-mono flex items-center gap-1 select-none print:text-black">
                 <Scissors className="w-3 h-3" />
-                <span>Gunting Sepanjang Garis Ini (Label {index + 1} dari 3)</span>
+                <span>Gunting Sepanjang Garis Ini (Label {index + 1} dari {totalLabels})</span>
               </div>
 
               {/* Institution Header inside Label */}
@@ -138,7 +160,9 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
                       PROGRAM STUDI TEKNIK INFORMATIKA
                     </p>
                     <p className="text-[9.5px] text-slate-500 font-medium">
-                      PANITIA SIDANG SKRIPSI • SLIP LABEL DRAFT PENGUJI
+                      {isSeminar
+                        ? 'PANITIA SEMINAR SKRIPSI • SLIP LABEL DRAFT SEMINAR'
+                        : 'PANITIA SIDANG SKRIPSI • SLIP LABEL DRAFT PENGUJI'}
                     </p>
                   </div>
                 </div>
@@ -156,10 +180,10 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
                   3. NIM & Nama Mahasiswa (contoh: 10120262 - SHANIA NUR LUTHFIA)
               */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-3">
-                {/* Field 1: Dosen Penguji & Peran */}
+                {/* Field 1: Dosen Penguji / Seminar & Peran */}
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 print:bg-white print:border-black">
                   <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
-                    DOSEN PENGUJI & PERAN:
+                    {isSeminar ? 'DOSEN SEMINAR & PERAN:' : 'DOSEN PENGUJI & PERAN:'}
                   </span>
                   <p className="text-xs font-extrabold text-slate-900 leading-tight">
                     {label.examinerName}
@@ -175,7 +199,7 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
                 {/* Field 2: Tanggal & Waktu / Ruang */}
                 <div className="p-3 rounded-lg bg-slate-50 border border-slate-200 print:bg-white print:border-black">
                   <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block mb-1">
-                    JADWAL & LOKASI SIDANG:
+                    {isSeminar ? 'JADWAL & LOKASI SEMINAR:' : 'JADWAL & LOKASI SIDANG:'}
                   </span>
                   <p className="text-xs font-extrabold text-slate-900 leading-tight">
                     {formattedDate}
@@ -208,7 +232,7 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
               {/* Thesis Title Box */}
               <div className="p-2.5 rounded-lg border border-slate-200 bg-slate-50/50 mb-3 text-xs text-slate-800 print:bg-white print:border-black">
                 <span className="text-[9px] uppercase font-bold text-slate-500 tracking-wider block mb-0.5">
-                  Judul Skripsi / Tugas Akhir:
+                  {isSeminar ? 'Judul Proposal / Seminar:' : 'Judul Skripsi / Tugas Akhir:'}
                 </span>
                 <p className="font-semibold italic leading-snug">
                   "{item.thesisTitle}"
@@ -219,7 +243,9 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
               <div className="flex items-center justify-between pt-2 border-t border-slate-200 text-[10px] text-slate-600 print:border-black">
                 <div className="space-y-0.5">
                   <p className="font-medium text-slate-500">
-                    * Wajib diserahkan ke dosen penguji paling lambat H-3 sebelum pelaksanaan sidang.
+                    {isSeminar
+                      ? '* Wajib diserahkan ke dosen pembimbing & reviewer paling lambat H-3 sebelum pelaksanaan seminar.'
+                      : '* Wajib diserahkan ke dosen penguji paling lambat H-3 sebelum pelaksanaan sidang.'}
                   </p>
                   <p className="text-[9px] text-slate-400 font-mono">
                     Token Verifikasi: {item.id.toUpperCase()}-{item.nim}-LABEL{index+1}
