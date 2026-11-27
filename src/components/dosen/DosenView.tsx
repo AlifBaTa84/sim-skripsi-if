@@ -253,7 +253,14 @@ export const DosenView: React.FC<DosenViewProps> = ({ viewMode = 'personal' }) =
 
           <div className="p-6">
             {personalSeminarSchedules.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div
+                className={
+                  personalSeminarSchedules.length > 4
+                    ? 'max-h-[960px] overflow-y-auto pr-2 scroll-smooth print:max-h-none print:overflow-visible print:pr-0'
+                    : ''
+                }
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {personalSeminarSchedules.map(item => {
                   const isCurrentReviewer = item.examiner1Id === currentLecturer.id;
                   const isCurrentAdvisor = item.examiner2Id === currentLecturer.id;
@@ -398,6 +405,7 @@ export const DosenView: React.FC<DosenViewProps> = ({ viewMode = 'personal' }) =
                     </div>
                   );
                 })}
+                </div>
               </div>
             ) : (
               <div className="text-center py-12">
@@ -438,7 +446,14 @@ export const DosenView: React.FC<DosenViewProps> = ({ viewMode = 'personal' }) =
           {/* ── D. Personal Sidang Schedule Cards ── */}
           <div className="p-6">
             {personalSidangSchedules.length > 0 ? (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              <div
+                className={
+                  personalSidangSchedules.length > 4
+                    ? 'max-h-[1060px] overflow-y-auto pr-2 scroll-smooth print:max-h-none print:overflow-visible print:pr-0'
+                    : ''
+                }
+              >
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                 {personalSidangSchedules.map(item => {
                   const isCurrentP1 = item.examiner1Id === currentLecturer.id;
                   const isCurrentP2 = item.examiner2Id === currentLecturer.id;
@@ -601,6 +616,7 @@ export const DosenView: React.FC<DosenViewProps> = ({ viewMode = 'personal' }) =
                     </div>
                   );
                 })}
+                </div>
               </div>
             ) : (
               <div className="text-center py-16">
