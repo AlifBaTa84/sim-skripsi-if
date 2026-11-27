@@ -138,11 +138,9 @@ export const RekapitulasiView: React.FC = () => {
       'Nama Mahasiswa',
       'Program Studi',
       'Judul Skripsi',
-      'Jenis',
-      'Penguji 1 (Ketua)',
+      'Penguji 1 (Ketua Penguji)',
       'Penguji 2 (Pembimbing)',
       'Penguji 3 (Anggota)',
-      'Nilai Seminar',
       'Status Sidang'
     ];
 
@@ -163,11 +161,9 @@ export const RekapitulasiView: React.FC = () => {
         item.studentName,
         item.studyProgram,
         item.thesisTitle,
-        item.thesisType || 'Skripsi',
-        lecturerMap.get(item.examiner1Id) || item.reviewerName || '-',
+        lecturerMap.get(item.examiner1Id) || '-',
         lecturerMap.get(item.examiner2Id) || item.advisorName || '-',
         lecturerMap.get(item.examiner3Id) || '-',
-        item.seminarScore || '-',
         statusLabel
       ];
     });
@@ -548,36 +544,26 @@ export const RekapitulasiView: React.FC = () => {
 
                       <td className="p-2.5 border-r border-slate-200 align-top text-xs">
                         <p className="text-slate-700 leading-relaxed font-medium">"{item.thesisTitle}"</p>
-                        <div className="mt-1 flex items-center gap-1.5">
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-slate-100 border border-slate-200 text-slate-700 print:border-black">
-                            {item.thesisType || 'Skripsi'}
-                          </span>
-                          {item.seminarScore && (
-                            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 print:border-black print:text-black">
-                              Nilai: {item.seminarScore}
-                            </span>
-                          )}
-                        </div>
                       </td>
 
                       <td className="p-2.5 border-r border-slate-200 align-top space-y-1 text-xs">
                         <div>
                           <span className="text-[10px] uppercase font-bold text-indigo-700 block print:text-black">
-                            1. Ketua (Reviewer):
+                            1. Ketua Penguji (P1):
                           </span>
-                          <span className="font-semibold text-slate-900">{p1 ? p1.name : item.reviewerName || '-'}</span>
+                          <span className="font-semibold text-slate-900">{p1 ? p1.name : '-'}</span>
                         </div>
                         <div>
                           <span className="text-[10px] uppercase font-bold text-sky-700 block print:text-black">
-                            2. Penguji 2 (Pembimbing):
+                            2. Penguji 2 / Pembimbing (P2):
                           </span>
                           <span className="font-semibold text-slate-900">{p2 ? p2.name : item.advisorName || '-'}</span>
                         </div>
                         <div>
                           <span className="text-[10px] uppercase font-bold text-teal-700 block print:text-black">
-                            3. Penguji 3:
+                            3. Penguji 3 (P3):
                           </span>
-                          <span className="font-semibold text-slate-900">{p3 ? p3.name : 'Belum Ditentukan'}</span>
+                          <span className="font-semibold text-slate-900">{p3 ? p3.name : '-'}</span>
                         </div>
                       </td>
 
