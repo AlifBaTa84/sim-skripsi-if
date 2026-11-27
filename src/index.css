@@ -71,6 +71,11 @@
     font-size: 11pt !important;
   }
 
+  /* Saat mencetak label draft, sembunyikan seluruh elemen di luar area label yang akan digunting */
+  body:has(#printable-labels-area) *:not(#printable-labels-area):not(#printable-labels-area *):not(:has(#printable-labels-area)) {
+    display: none !important;
+  }
+
   /* Printable area takes full sheet */
   #printable-labels-area,
   #printable-report-area,

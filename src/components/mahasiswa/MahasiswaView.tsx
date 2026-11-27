@@ -72,6 +72,7 @@ export const MahasiswaView: React.FC = () => {
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
+      <div className={printTargetItem ? 'space-y-6 print:hidden' : 'space-y-6'}>
       
       {/* Top Banner: Student Identity Card */}
       <div className="bg-white rounded-2xl p-5 border border-slate-200 shadow-sm flex flex-col md:flex-row md:items-center md:justify-between gap-5">
@@ -630,6 +631,7 @@ export const MahasiswaView: React.FC = () => {
         </div>
       </div>
       )}
+      </div>
 
       {/* Printable Label Modal (Seminar maupun Sidang) */}
       {printTargetItem && (
