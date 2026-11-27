@@ -14,7 +14,9 @@ import {
   Clock,
   Archive,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Users,
+  ListFilter
 } from 'lucide-react';
 import { formatIndonesianDate, exportToCSV } from '../../utils/formatters';
 import { CalendarDatePicker } from '../shared/CalendarDatePicker';
@@ -32,10 +34,10 @@ export const RekapitulasiView: React.FC = () => {
   } = useSchedule();
 
   // Filters
-  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('active');
+  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('all');
   const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all');
   const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('all');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('scheduled');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
   const [filterDate, setFilterDate] = useState<string>('all');
   const [showComparison, setShowComparison] = useState<boolean>(true);
 
@@ -276,7 +278,7 @@ export const RekapitulasiView: React.FC = () => {
             </select>
           </div>
 
-          {/* Filter Status Sidang */}
+          {/* ── Filter Status Sidang */}
           <div>
             <label className="block text-xs font-semibold text-slate-600 mb-1">Status Sidang:</label>
             <select
@@ -285,9 +287,9 @@ export const RekapitulasiView: React.FC = () => {
               className="w-full h-9 px-3 text-xs bg-slate-50 border border-slate-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-indigo-500/20 focus:border-indigo-500 font-medium"
             >
               <option value="all">Semua Status</option>
-              <option value="scheduled">Terjadwal</option>
-              <option value="completed">Selesai (Kunci)</option>
-              <option value="unassigned">Antrean (Belum Terjadwal)</option>
+              <option value="completed">✅ Selesai Sidang</option>
+              <option value="scheduled">📅 Terjadwal</option>
+              <option value="unassigned">🕐 Antrean (Belum Terjadwal)</option>
             </select>
           </div>
 
@@ -304,6 +306,77 @@ export const RekapitulasiView: React.FC = () => {
             />
           </div>
         </div>
+      </div>
+
+      {/* ── Summary Stats Cards ── */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:hidden">
+        {/* Total */}
+        <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+            <FileText className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-slate-500">Total Ditampilkan</p>
+            <p className="text-xl font-bold text-slate-900">{filteredReportList.length}</p>
+          </div>
+        </div>
+        {/* Selesai */}
+        <button
+          onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'completed' ? 'all' : 'completed')}
+          className={`rounded-2xl p-4 border shadow-xs flex items-center gap-3 text-left transition-all ${
+            selectedStatusFilter === 'completed'
+              ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-200'
+              : 'bg-white border-slate-200/80 hover:bg-emerald-50/60 hover:border-emerald-200'
+          }`}
+        >
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+            <CheckCircle2 className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-emerald-700">Selesai Sidang</p>
+            <p className="text-xl font-bold text-emerald-800">
+              {schedules.filter(s => s.status === 'completed').length}
+            </p>
+          </div>
+        </button>
+        {/* Terjadwal */}
+        <button
+          onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'scheduled' ? 'all' : 'scheduled')}
+          className={`rounded-2xl p-4 border shadow-xs flex items-center gap-3 text-left transition-all ${
+            selectedStatusFilter === 'scheduled'
+              ? 'bg-blue-50 border-blue-300 ring-2 ring-blue-200'
+              : 'bg-white border-slate-200/80 hover:bg-blue-50/60 hover:border-blue-200'
+          }`}
+        >
+          <div className="w-10 h-10 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+            <Calendar className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-blue-700">Terjadwal</p>
+            <p className="text-xl font-bold text-blue-800">
+              {schedules.filter(s => s.status === 'scheduled').length}
+            </p>
+          </div>
+        </button>
+        {/* Antrean */}
+        <button
+          onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'unassigned' ? 'all' : 'unassigned')}
+          className={`rounded-2xl p-4 border shadow-xs flex items-center gap-3 text-left transition-all ${
+            selectedStatusFilter === 'unassigned'
+              ? 'bg-amber-50 border-amber-300 ring-2 ring-amber-200'
+              : 'bg-white border-slate-200/80 hover:bg-amber-50/60 hover:border-amber-200'
+          }`}
+        >
+          <div className="w-10 h-10 rounded-xl bg-amber-100 text-amber-700 flex items-center justify-center shrink-0">
+            <Clock className="w-5 h-5" />
+          </div>
+          <div>
+            <p className="text-xs font-semibold text-amber-700">Antrean</p>
+            <p className="text-xl font-bold text-amber-800">
+              {schedules.filter(s => s.status === 'unassigned').length}
+            </p>
+          </div>
+        </button>
       </div>
 
       {/* ── Perbandingan Jumlah Peserta Sidang Antarperiode ── */}
