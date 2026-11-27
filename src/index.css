@@ -77,7 +77,13 @@
   }
 
   /* Printable area takes full sheet */
-  #printable-labels-area,
+  #printable-labels-area {
+    display: block !important;
+    width: 100% !important;
+    margin: 0 !important;
+    padding: 14px 0 0 0 !important;
+  }
+
   #printable-report-area,
   #printable-dosen-detail,
   #printable-dosen-modal,

@@ -78,8 +78,8 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static">
-      <div className="bg-white rounded-3xl max-w-4xl w-full border border-slate-200/90 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col print:border-none print:shadow-none print:max-w-none">
+    <div className="fixed inset-0 z-50 bg-slate-950/60 backdrop-blur-xs flex items-start sm:items-center justify-center p-4 overflow-y-auto print:p-0 print:bg-white print:static print:block">
+      <div className="bg-white rounded-3xl max-w-4xl w-full max-h-[92vh] my-auto border border-slate-200/90 shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-200 flex flex-col print:border-none print:shadow-none print:max-w-none print:max-h-none print:overflow-visible print:rounded-none">
         
         {/* Modal Top Header - Hidden on Print */}
         <div className="px-6 py-5 border-b border-slate-100 bg-slate-50/50 flex items-center justify-between shrink-0 print:hidden">
@@ -131,7 +131,7 @@ export const PrintDraftLabelModal: React.FC<PrintDraftLabelModalProps> = ({
         </div>
 
         {/* Printable Label Sheet Area */}
-        <div className="p-6 overflow-y-auto space-y-6 print:p-0 print:space-y-4 print:m-0" id="printable-labels-area">
+        <div className="flex-1 min-h-0 px-6 pt-8 pb-6 overflow-y-auto space-y-8 print:overflow-visible print:px-0 print:pt-4 print:pb-0 print:space-y-6 print:m-0" id="printable-labels-area">
           
           {labelsData.map((label, index) => (
             <div
