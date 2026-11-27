@@ -275,15 +275,18 @@ export const InteractiveMatrixBoard: React.FC<InteractiveMatrixBoardProps> = ({
 
   const handleReviewerAssigned = (reviewerId: string) => {
     if (pendingSeminarDrop) {
-      assignSchedule(
-        pendingSeminarDrop.itemId,
-        pendingSeminarDrop.date,
-        pendingSeminarDrop.slotId,
-        pendingSeminarDrop.roomId
-      );
+      const drop = pendingSeminarDrop;
       setPendingSeminarDrop(null);
+      setSelectedSeminarForReviewer(null);
+      // Defer assignSchedule ke microtask berikutnya agar setSchedules dari
+      // assignSeminarReviewer (dipanggil di modal) sudah di-commit ke state React
+      // sebelum assignSchedule membaca examiner1Id dari schedules state
+      setTimeout(() => {
+        assignSchedule(drop.itemId, drop.date, drop.slotId, drop.roomId);
+      }, 0);
+    } else {
+      setSelectedSeminarForReviewer(null);
     }
-    setSelectedSeminarForReviewer(null);
   };
 
   const handleRescheduleSeminar = (item: ScheduleItem) => {

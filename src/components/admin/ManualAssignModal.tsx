@@ -32,10 +32,11 @@ export const ManualAssignModal: React.FC<ManualAssignModalProps> = ({ item, isOp
 
   if (!isOpen || !item) return null;
 
+  const isSeminar = item.activityType === 'seminar';
   const lecturerMap = new Map(lecturers.map(l => [l.id, l.name]));
 
-  // Eligible Examiner 3 candidates (excluding advisor and reviewer)
-  const candidatesP3 = getEligibleExaminer3Candidates(
+  // Eligible Examiner 3 candidates (excluding advisor and reviewer) — hanya untuk Sidang
+  const candidatesP3 = !isSeminar ? getEligibleExaminer3Candidates(
     item.examiner2Id,
     item.examiner1Id,
     lecturers,
@@ -43,14 +44,15 @@ export const ManualAssignModal: React.FC<ManualAssignModalProps> = ({ item, isOp
     targetDate,
     selectedSlotId || undefined,
     rooms
-  );
+  ) : [];
 
-  const activeP3 = selectedExaminer3 || item.examiner3Id || candidatesP3[0]?.lecturer.id || '';
+  const activeP3 = !isSeminar ? (selectedExaminer3 || item.examiner3Id || candidatesP3[0]?.lecturer.id || '') : '';
 
   const handleConfirm = () => {
     if (!selectedSlotId || !selectedRoomId) return;
 
-    if (!item.examiner3Id && activeP3) {
+    // Untuk Sidang: alokasikan P3 jika belum ada
+    if (!isSeminar && !item.examiner3Id && activeP3) {
       assignExaminer3(item.id, activeP3);
     }
 
@@ -62,7 +64,7 @@ export const ManualAssignModal: React.FC<ManualAssignModalProps> = ({ item, isOp
 
   const effectiveItem = {
     ...item,
-    examiner3Id: activeP3,
+    examiner3Id: isSeminar ? '' : activeP3,
   };
 
   return (
@@ -77,7 +79,7 @@ export const ManualAssignModal: React.FC<ManualAssignModalProps> = ({ item, isOp
             </div>
             <div>
               <h3 className="text-base sm:text-lg font-bold text-slate-900 leading-tight">
-                Pilih Slot Sidang Manual
+                {isSeminar ? 'Pilih Slot Seminar Manual' : 'Pilih Slot Sidang Manual'}
               </h3>
               <p className="text-xs text-slate-500 mt-0.5">
                 Tentukan tanggal, jam, dan ruangan bebas bentrok untuk mahasiswa
@@ -109,22 +111,30 @@ export const ManualAssignModal: React.FC<ManualAssignModalProps> = ({ item, isOp
           
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 mt-3 pt-3 border-t border-indigo-100/60">
             <div>
-              <span className="text-xs font-semibold text-indigo-700">Ketua (Reviewer):</span>
-              <p className="text-sm font-semibold text-slate-900 truncate mt-0.5">{lecturerMap.get(item.examiner1Id)}</p>
+              <span className="text-xs font-semibold text-indigo-700">
+                {isSeminar ? 'Reviewer:' : 'Ketua (Reviewer):'}
+              </span>
+              <p className="text-sm font-semibold text-slate-900 truncate mt-0.5">
+                {lecturerMap.get(item.examiner1Id) || (isSeminar ? item.reviewerName : null) || '-'}
+              </p>
             </div>
             <div>
-              <span className="text-xs font-semibold text-sky-700">Penguji 2 (Pembimbing):</span>
-              <p className="text-sm font-semibold text-slate-900 truncate mt-0.5">{lecturerMap.get(item.examiner2Id)}</p>
+              <span className="text-xs font-semibold text-sky-700">
+                {isSeminar ? 'Pembimbing:' : 'Penguji 2 (Pembimbing):'}
+              </span>
+              <p className="text-sm font-semibold text-slate-900 truncate mt-0.5">{lecturerMap.get(item.examiner2Id) || '-'}</p>
             </div>
-            <div>
-              <span className="text-xs font-semibold text-teal-700">Penguji 3:</span>
-              <p className="text-sm font-semibold text-slate-900 truncate mt-0.5">{lecturerMap.get(activeP3) || 'Pilih di bawah'}</p>
-            </div>
+            {!isSeminar && (
+              <div>
+                <span className="text-xs font-semibold text-teal-700">Penguji 3:</span>
+                <p className="text-sm font-semibold text-slate-900 truncate mt-0.5">{lecturerMap.get(activeP3) || 'Pilih di bawah'}</p>
+              </div>
+            )}
           </div>
         </div>
 
-        {/* Penguji 3 Selector if not yet chosen */}
-        {(!item.examiner3Id || item.examiner3Id === '') && (
+        {/* Penguji 3 Selector — hanya untuk Sidang, bukan Seminar */}
+        {!isSeminar && (!item.examiner3Id || item.examiner3Id === '') && (
           <div className="px-5 py-3.5 bg-teal-50/70 border-b border-teal-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <div className="flex items-center gap-2">

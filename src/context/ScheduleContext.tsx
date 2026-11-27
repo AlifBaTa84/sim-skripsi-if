@@ -1301,6 +1301,10 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
           isSeminarPassed: false,
           timeSlotId: null,
           roomId: null,
+          date: '',
+          // Reset reviewer agar Admin dapat memilih ulang reviewer untuk pelaksanaan baru
+          examiner1Id: '',
+          reviewerName: undefined,
           seminarHistory: updatedHistory,
           notes: `Penjadwalan ulang seminar (Percobaan ke-${nextAttempt}).`,
         };
@@ -1792,45 +1796,38 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     let scheduledCount = 0;
 
     for (const item of unassignedItems) {
+      const isSeminar = item.activityType === 'seminar';
+
+      // Seminar yang belum ada reviewer-nya tidak dapat dijadwalkan otomatis
+      if (isSeminar && (!item.examiner1Id || item.examiner1Id.trim() === '')) {
+        continue;
+      }
+
       const workingItem = { ...item };
       let scheduledThisStudent = false;
 
-      // Cari kombinasi slot dan ruangan bebas bentrok untuk Reviewer & Pembimbing
+      // Cari kombinasi slot dan ruangan bebas bentrok
       for (const slot of timeSlots) {
         if (scheduledThisStudent) break;
 
         for (const room of rooms) {
-          // Cek ketersediaan ruangan & waktu untuk Reviewer & Pembimbing
-          const baseCheck = checkScheduleConflict(
-            { ...workingItem, examiner3Id: '' },
-            selectedDate,
-            slot.id,
-            room.id,
-            tempSchedules,
-            lecturers,
-            rooms
-          );
-
-          if (!baseCheck.hasConflict) {
-            // Alokasikan Penguji 3 secara proporsional:
-            // Dosen dengan beban Reviewer/Pembimbing paling sedikit mendapat prioritas proporsi Penguji 3 paling tinggi
-            const candidates = getEligibleExaminer3Candidates(
-              workingItem.examiner2Id,
-              workingItem.examiner1Id,
-              lecturers,
-              tempSchedules,
+          if (isSeminar) {
+            // ── JALUR SEMINAR: Cek konflik Reviewer & Pembimbing, tanpa P3 ──
+            const seminarCheck = checkScheduleConflict(
+              workingItem,
               selectedDate,
               slot.id,
+              room.id,
+              tempSchedules,
+              lecturers,
               rooms
             );
 
-            const bestCandidate = candidates.find(c => c.isAvailable);
-            if (bestCandidate) {
+            if (!seminarCheck.hasConflict) {
               tempSchedules = tempSchedules.map(s => {
                 if (s.id === item.id) {
                   return {
                     ...s,
-                    examiner3Id: bestCandidate.lecturer.id,
                     date: selectedDate,
                     timeSlotId: slot.id,
                     roomId: room.id,
@@ -1843,6 +1840,52 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
               scheduledCount++;
               scheduledThisStudent = true;
               break;
+            }
+          } else {
+            // ── JALUR SIDANG: Cek konflik dasar dulu (tanpa P3), lalu alokasikan P3 ──
+            const baseCheck = checkScheduleConflict(
+              { ...workingItem, examiner3Id: '' },
+              selectedDate,
+              slot.id,
+              room.id,
+              tempSchedules,
+              lecturers,
+              rooms
+            );
+
+            if (!baseCheck.hasConflict) {
+              // Alokasikan Penguji 3 secara proporsional:
+              // Dosen dengan beban Reviewer/Pembimbing paling sedikit mendapat prioritas proporsi Penguji 3 paling tinggi
+              const candidates = getEligibleExaminer3Candidates(
+                workingItem.examiner2Id,
+                workingItem.examiner1Id,
+                lecturers,
+                tempSchedules,
+                selectedDate,
+                slot.id,
+                rooms
+              );
+
+              const bestCandidate = candidates.find(c => c.isAvailable);
+              if (bestCandidate) {
+                tempSchedules = tempSchedules.map(s => {
+                  if (s.id === item.id) {
+                    return {
+                      ...s,
+                      examiner3Id: bestCandidate.lecturer.id,
+                      date: selectedDate,
+                      timeSlotId: slot.id,
+                      roomId: room.id,
+                      status: 'scheduled',
+                    };
+                  }
+                  return s;
+                });
+
+                scheduledCount++;
+                scheduledThisStudent = true;
+                break;
+              }
             }
           }
         }
