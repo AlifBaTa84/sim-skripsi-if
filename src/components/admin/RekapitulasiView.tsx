@@ -37,7 +37,7 @@ export const RekapitulasiView: React.FC = () => {
   const [selectedPeriodFilter, setSelectedPeriodFilter] = useState<string>('all');
   const [selectedYearFilter, setSelectedYearFilter] = useState<string>('all');
   const [selectedSemesterFilter, setSelectedSemesterFilter] = useState<string>('all');
-  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('all');
+  const [selectedStatusFilter, setSelectedStatusFilter] = useState<string>('completed');
   const [filterDate, setFilterDate] = useState<string>('all');
   const [showComparison, setShowComparison] = useState<boolean>(true);
 
@@ -47,15 +47,20 @@ export const RekapitulasiView: React.FC = () => {
   const timeSlotMap = new Map(timeSlots.map(t => [t.id, t.label]));
   const periodMap = new Map(academicPeriods.map(p => [p.id, p]));
 
+  // Hanya data sidang (bukan seminar) yang masuk rekap
+  const sidangSchedules = useMemo(() =>
+    schedules.filter(s => !s.activityType || s.activityType === 'sidang'),
+  [schedules]);
+
   // Unique academic years from periods
   const academicYears = useMemo(() => {
     return Array.from(new Set(academicPeriods.map(p => p.academicYear))).sort().reverse();
   }, [academicPeriods]);
 
-  // Comparison Statistics across all periods
+  // Comparison Statistics across all periods — hanya sidang
   const periodComparisonStats = useMemo(() => {
     return academicPeriods.map(p => {
-      const items = schedules.filter(s => s.academicPeriodId === p.id || (!s.academicPeriodId && p.isActive));
+      const items = sidangSchedules.filter(s => s.academicPeriodId === p.id || (!s.academicPeriodId && p.isActive));
       const scheduled = items.filter(s => s.status === 'scheduled').length;
       const completed = items.filter(s => s.status === 'completed').length;
       const unassigned = items.filter(s => s.status === 'unassigned').length;
@@ -68,11 +73,11 @@ export const RekapitulasiView: React.FC = () => {
         unassigned,
       };
     });
-  }, [academicPeriods, schedules]);
+  }, [academicPeriods, sidangSchedules]);
 
-  // Filtered schedules for report
+  // Filtered schedules for report — hanya sidang
   const filteredReportList = useMemo(() => {
-    return schedules.filter(item => {
+    return sidangSchedules.filter(item => {
       // 1. Filter Period
       if (selectedPeriodFilter === 'active') {
         const itemPeriodId = item.academicPeriodId || (activePeriod?.id || '');
@@ -107,13 +112,13 @@ export const RekapitulasiView: React.FC = () => {
       return true;
     });
   }, [
-    schedules, 
-    selectedPeriodFilter, 
-    selectedYearFilter, 
-    selectedSemesterFilter, 
-    selectedStatusFilter, 
-    filterDate, 
-    activePeriod, 
+    sidangSchedules,
+    selectedPeriodFilter,
+    selectedYearFilter,
+    selectedSemesterFilter,
+    selectedStatusFilter,
+    filterDate,
+    activePeriod,
     periodMap
   ]);
 
@@ -310,7 +315,7 @@ export const RekapitulasiView: React.FC = () => {
 
       {/* ── Summary Stats Cards ── */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 print:hidden">
-        {/* Total */}
+        {/* Total Selesai ditampilkan */}
         <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
             <FileText className="w-5 h-5" />
@@ -320,7 +325,7 @@ export const RekapitulasiView: React.FC = () => {
             <p className="text-xl font-bold text-slate-900">{filteredReportList.length}</p>
           </div>
         </div>
-        {/* Selesai */}
+        {/* Selesai Sidang */}
         <button
           onClick={() => setSelectedStatusFilter(selectedStatusFilter === 'completed' ? 'all' : 'completed')}
           className={`rounded-2xl p-4 border shadow-xs flex items-center gap-3 text-left transition-all ${
@@ -335,7 +340,7 @@ export const RekapitulasiView: React.FC = () => {
           <div>
             <p className="text-xs font-semibold text-emerald-700">Selesai Sidang</p>
             <p className="text-xl font-bold text-emerald-800">
-              {schedules.filter(s => s.status === 'completed').length}
+              {sidangSchedules.filter(s => s.status === 'completed').length}
             </p>
           </div>
         </button>
@@ -354,7 +359,7 @@ export const RekapitulasiView: React.FC = () => {
           <div>
             <p className="text-xs font-semibold text-blue-700">Terjadwal</p>
             <p className="text-xl font-bold text-blue-800">
-              {schedules.filter(s => s.status === 'scheduled').length}
+              {sidangSchedules.filter(s => s.status === 'scheduled').length}
             </p>
           </div>
         </button>
@@ -373,7 +378,7 @@ export const RekapitulasiView: React.FC = () => {
           <div>
             <p className="text-xs font-semibold text-amber-700">Antrean</p>
             <p className="text-xl font-bold text-amber-800">
-              {schedules.filter(s => s.status === 'unassigned').length}
+              {sidangSchedules.filter(s => s.status === 'unassigned').length}
             </p>
           </div>
         </button>
