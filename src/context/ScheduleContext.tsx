@@ -119,6 +119,13 @@ interface ScheduleContextType {
 
   // Seminar Operations (Business Rules 2.1 - 2.4)
   assignSeminarReviewer: (itemId: string, reviewerId: string) => void;
+  assignSeminarReviewerAndSchedule: (
+    itemId: string,
+    reviewerId: string,
+    targetDate: string,
+    timeSlotId: string,
+    roomId: string
+  ) => { success: boolean; reasons?: string[] };
   recordSeminarResult: (itemId: string, result: 'lulus' | 'belum_lulus', score?: number, feedback?: string) => { success: boolean; error?: string };
   rescheduleSeminar: (itemId: string) => { success: boolean; error?: string };
   validateSidangEligibility: (studentNim: string) => { 
@@ -1129,6 +1136,93 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     );
   }, [schedules, lecturers, addToast]);
 
+  // Menetapkan Reviewer + Menjadwalkan Seminar dalam satu operasi atomik
+  // Solusi untuk stale closure bug saat drag-drop seminar (menggantikan setTimeout)
+  const assignSeminarReviewerAndSchedule = useCallback((
+    itemId: string,
+    reviewerId: string,
+    targetDate: string,
+    timeSlotId: string,
+    roomId: string
+  ): { success: boolean; reasons?: string[] } => {
+    const item = schedules.find(s => s.id === itemId);
+    if (!item || item.activityType !== 'seminar') {
+      return { success: false, reasons: ['Item seminar tidak ditemukan.'] };
+    }
+
+    // Validasi: reviewer tidak boleh sama dengan pembimbing
+    if (reviewerId === item.examiner2Id) {
+      addToast('error', 'Reviewer Tidak Valid', 'Dosen Reviewer tidak boleh sama dengan Dosen Pembimbing.');
+      return { success: false, reasons: ['Reviewer = Pembimbing.'] };
+    }
+
+    // Validasi periode akademik
+    if (item.academicPeriodId) {
+      const p = academicPeriods.find(per => per.id === item.academicPeriodId);
+      if (p && p.status === 'selesai') {
+        addToast('error', 'Periode Akademik Selesai', `Periode ${p.academicYear} ${p.semester} telah selesai.`);
+        return { success: false, reasons: ['Periode akademik telah selesai.'] };
+      }
+    }
+
+    // Buat item sementara dengan reviewer baru untuk conflict check
+    const itemWithReviewer: ScheduleItem = { ...item, examiner1Id: reviewerId };
+
+    const validation = checkScheduleConflict(
+      itemWithReviewer,
+      targetDate,
+      timeSlotId,
+      roomId,
+      schedules,
+      lecturers,
+      rooms
+    );
+
+    if (validation.hasConflict) {
+      addToast('error', 'Jadwal Bentrok!', validation.reasons[0] || 'Terdapat bentrok jadwal.');
+      return { success: false, reasons: validation.reasons };
+    }
+
+    const lec = lecturers.find(l => l.id === reviewerId);
+    const roomName = rooms.find(r => r.id === roomId)?.name || 'Ruangan';
+    const slotLabel = timeSlots.find(t => t.id === timeSlotId)?.label || 'Waktu';
+
+    // Satu setSchedules atomik: set reviewer + jadwal sekaligus (tidak ada race condition)
+    setSchedules(prev => prev.map(s => {
+      if (s.id === itemId) {
+        return {
+          ...s,
+          examiner1Id: reviewerId,
+          reviewerName: lec?.name,
+          date: targetDate,
+          timeSlotId,
+          roomId,
+          status: 'scheduled' as const,
+          seminarStatus: 'terjadwal' as const,
+        };
+      }
+      return s;
+    }));
+
+    // DB sync (best-effort)
+    if (item.seminarRegistrationId) {
+      dbRepository.assignSeminarReviewer(item.seminarRegistrationId, reviewerId).catch(err => {
+        console.warn('DB assignSeminarReviewer error', err);
+      });
+    }
+    dbRepository.assignSchedule(itemId, targetDate, timeSlotId, roomId).catch(err => {
+      console.warn('DB assignSchedule error', err);
+    });
+
+    addToast(
+      'success',
+      'Seminar Dijadwalkan!',
+      `Reviewer ${lec?.name || ''} ditetapkan. ${item.studentName} ditempatkan di ${roomName} (${slotLabel}).`
+    );
+
+    return { success: true };
+  }, [schedules, lecturers, rooms, timeSlots, academicPeriods, addToast]);
+
   // Mencatat Hasil Pelaksanaan Seminar (Lulus vs Belum Lulus)
   // Aturan: Jika seminar lulus maka otomatis data pengajuan sidang di database diisi dan card aktif di antrean sidang
   const recordSeminarResult = useCallback((
@@ -1991,6 +2085,7 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         activityTypeFilter,
         setActivityTypeFilter,
         assignSeminarReviewer,
+        assignSeminarReviewerAndSchedule,
         recordSeminarResult,
         rescheduleSeminar,
         validateSidangEligibility,

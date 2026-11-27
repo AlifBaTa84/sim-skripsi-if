@@ -64,6 +64,7 @@ export const InteractiveMatrixBoard: React.FC<InteractiveMatrixBoardProps> = ({
     activityTypeFilter,
     setActivityTypeFilter,
     addToast,
+    assignSeminarReviewerAndSchedule,
   } = useSchedule();
 
   const currentViewingPeriod = useMemo(() => {
@@ -278,12 +279,9 @@ export const InteractiveMatrixBoard: React.FC<InteractiveMatrixBoardProps> = ({
       const drop = pendingSeminarDrop;
       setPendingSeminarDrop(null);
       setSelectedSeminarForReviewer(null);
-      // Defer assignSchedule ke microtask berikutnya agar setSchedules dari
-      // assignSeminarReviewer (dipanggil di modal) sudah di-commit ke state React
-      // sebelum assignSchedule membaca examiner1Id dari schedules state
-      setTimeout(() => {
-        assignSchedule(drop.itemId, drop.date, drop.slotId, drop.roomId);
-      }, 0);
+      // Gunakan fungsi atomik: satu setSchedules call untuk set reviewer + schedule
+      // Menghindari stale closure bug yang terjadi dengan setTimeout
+      assignSeminarReviewerAndSchedule(drop.itemId, reviewerId, drop.date, drop.slotId, drop.roomId);
     } else {
       setSelectedSeminarForReviewer(null);
     }
@@ -647,6 +645,7 @@ export const InteractiveMatrixBoard: React.FC<InteractiveMatrixBoardProps> = ({
           setPendingSeminarDrop(null);
         }}
         onAssigned={handleReviewerAssigned}
+        skipReviewerAssign={!!pendingSeminarDrop}
       />
 
       {/* Record Seminar Result Modal (Section 2.1 & 2.2) */}

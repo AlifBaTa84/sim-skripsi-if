@@ -16,6 +16,8 @@ interface AssignSeminarReviewerModalProps {
   isOpen: boolean;
   onClose: () => void;
   onAssigned?: (reviewerId: string) => void;
+  /** Jika true, handleSave tidak memanggil assignSeminarReviewer (delegasi ke caller via onAssigned) */
+  skipReviewerAssign?: boolean;
 }
 
 export const AssignSeminarReviewerModal: React.FC<AssignSeminarReviewerModalProps> = ({
@@ -23,6 +25,7 @@ export const AssignSeminarReviewerModal: React.FC<AssignSeminarReviewerModalProp
   isOpen,
   onClose,
   onAssigned,
+  skipReviewerAssign = false,
 }) => {
   const { lecturers, assignSeminarReviewer } = useSchedule();
   const [selectedReviewerId, setSelectedReviewerId] = useState<string>('');
@@ -55,7 +58,9 @@ export const AssignSeminarReviewerModal: React.FC<AssignSeminarReviewerModalProp
 
   const handleSave = () => {
     if (!selectedReviewerId) return;
-    assignSeminarReviewer(item.id, selectedReviewerId);
+    if (!skipReviewerAssign) {
+      assignSeminarReviewer(item.id, selectedReviewerId);
+    }
     if (onAssigned) {
       onAssigned(selectedReviewerId);
     }
