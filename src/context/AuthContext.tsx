@@ -7,6 +7,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback } fr
 import { User, UserRole, ScheduleItem, Lecturer } from '../types';
 import { validatePassword, validateCaptcha } from '../utils/authValidator';
 import { INITIAL_LECTURERS, INITIAL_SCHEDULE_ITEMS } from '../data/mockData';
+import { dbRepository } from '../db/repository';
+import { PenggunaRecord } from '../db/types';
 
 export interface DemoAccount {
   label: string;
@@ -19,31 +21,132 @@ export interface DemoAccount {
   unavailableReason?: string;
 }
 
+const REGISTERED_USERS_STORAGE_KEY = 'sim_sidang_registered_users_v2';
+
+function readRegisteredUsersFromStorage(): StoredUser[] {
+  try {
+    const raw = localStorage.getItem(REGISTERED_USERS_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (e) {
+    console.error('Failed to parse registered users', e);
+  }
+  return [];
+}
+
+function saveRegisteredUsersToStorage(users: StoredUser[]): void {
+  try {
+    localStorage.setItem(REGISTERED_USERS_STORAGE_KEY, JSON.stringify(users));
+  } catch (e) {
+    console.error('Failed to save registered users', e);
+  }
+}
+
+async function syncUserToIndexedDB(u: StoredUser): Promise<void> {
+  try {
+    const existingAll = await dbRepository.getUsers();
+    const existing = existingAll.find(
+      (rec) =>
+        rec.id === u.id ||
+        rec.email.toLowerCase() === u.email.toLowerCase() ||
+        (u.studentNim && rec.student_nim === u.studentNim) ||
+        (u.lecturerId && rec.lecturer_id === u.lecturerId)
+    );
+    const record: PenggunaRecord = {
+      id: existing?.id || u.id,
+      email: u.email.toLowerCase(),
+      nama: u.name,
+      roles: u.roles,
+      role_utama: u.activeRole,
+      password_hash: u.passwordHash,
+      password_required: false,
+      lecturer_id: u.lecturerId ?? existing?.lecturer_id,
+      student_nim: u.studentNim ?? existing?.student_nim,
+      is_active: u.isActive !== false,
+      created_at: existing?.created_at || new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    await dbRepository.saveUser(record);
+  } catch (err) {
+    console.warn('[AuthContext] Gagal sinkronisasi user ke IndexedDB:', err);
+  }
+}
+
+/**
+ * Sinkronkan data pengguna, dosen, dan jadwal dari IndexedDB ke localStorage
+ * agar proses login dan demo akun selalu membaca data aktual dari database.
+ */
+export async function syncDatabaseToAuthStorage(): Promise<void> {
+  try {
+    const [dbUsers, dbLecturers, dbSchedules] = await Promise.all([
+      dbRepository.getUsers().catch(() => [] as PenggunaRecord[]),
+      dbRepository.getLecturers().catch(() => [] as Lecturer[]),
+      dbRepository.getScheduleItems().catch(() => [] as ScheduleItem[]),
+    ]);
+
+    if (dbLecturers.length > 0 && localStorage.getItem('sim_sidang_lecturers_v2') === null) {
+      localStorage.setItem('sim_sidang_lecturers_v2', JSON.stringify(dbLecturers));
+    }
+
+    if (dbSchedules.length > 0 && localStorage.getItem('sim_sidang_schedules_v2') === null) {
+      localStorage.setItem('sim_sidang_schedules_v2', JSON.stringify(dbSchedules));
+    }
+
+    if (dbUsers.length > 0) {
+      const localUsers = readRegisteredUsersFromStorage();
+      const mergedMap = new Map<string, StoredUser>();
+
+      localUsers.forEach((u) => {
+        if (u.email) mergedMap.set(u.email.toLowerCase(), u);
+      });
+
+      dbUsers.forEach((u: PenggunaRecord) => {
+        const email = u.email.toLowerCase();
+        const existing = mergedMap.get(email);
+        const fallbackPwd =
+          u.roles.includes('mahasiswa')
+            ? `Mhs#${u.student_nim || '2025'}`
+            : u.roles.includes('admin') && !u.roles.includes('dosen')
+            ? 'Admin#2025'
+            : 'Dosen#2025';
+
+        mergedMap.set(email, {
+          id: u.id,
+          name: u.nama,
+          email,
+          roles: u.roles,
+          activeRole: u.role_utama || u.roles[0] || 'mahasiswa',
+          lecturerId: u.lecturer_id,
+          studentNim: u.student_nim,
+          isActive: u.is_active !== false,
+          passwordHash: u.password_hash || existing?.passwordHash || fallbackPwd,
+        });
+      });
+
+      saveRegisteredUsersToStorage(Array.from(mergedMap.values()));
+    }
+  } catch (err) {
+    console.warn('[AuthContext] Gagal menyinkronkan database ke auth storage:', err);
+  }
+}
+
 export const getActiveDemoAccounts = (): DemoAccount[] => {
-  // 1. Ambil data mahasiswa aktif dari storage (prioritaskan 10120262 jika tersedia)
-  let firstStudent: { nim: string; name: string } | null = null;
+  const registeredUsers = readRegisteredUsersFromStorage();
+
+  // 1. Ambil data mahasiswa aktif dari storage
+  let schedulesList: ScheduleItem[] = [];
   try {
     const savedSchedules = localStorage.getItem('sim_sidang_schedules_v2');
     if (savedSchedules !== null) {
       const parsed: ScheduleItem[] = JSON.parse(savedSchedules);
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        const targetMhs = parsed.find((s) => s.nim === '10120262') || parsed[0];
-        firstStudent = {
-          nim: targetMhs.nim,
-          name: targetMhs.studentName,
-        };
-      }
+      if (Array.isArray(parsed)) schedulesList = parsed;
     } else {
-      const targetMhs = INITIAL_SCHEDULE_ITEMS.find((s) => s.nim === '10120262') || INITIAL_SCHEDULE_ITEMS[0];
-      if (targetMhs) {
-        firstStudent = {
-          nim: targetMhs.nim,
-          name: targetMhs.studentName,
-        };
-      }
+      schedulesList = INITIAL_SCHEDULE_ITEMS;
     }
   } catch (e) {
-    console.error('Failed to get student for demo accounts', e);
+    console.error('Failed to get schedules for demo accounts', e);
   }
 
   // 2. Ambil data dosen aktif dari storage
@@ -52,9 +155,7 @@ export const getActiveDemoAccounts = (): DemoAccount[] => {
     const savedLecturers = localStorage.getItem('sim_sidang_lecturers_v2');
     if (savedLecturers !== null) {
       const parsed: Lecturer[] = JSON.parse(savedLecturers);
-      if (Array.isArray(parsed)) {
-        lecturersList = parsed;
-      }
+      if (Array.isArray(parsed)) lecturersList = parsed;
     } else {
       lecturersList = INITIAL_LECTURERS;
     }
@@ -62,36 +163,83 @@ export const getActiveDemoAccounts = (): DemoAccount[] => {
     console.error('Failed to get lecturers for demo accounts', e);
   }
 
-  // Cari dosen multi-peran (Dosen + Panitia Sidang)
-  const dualRoleLecturer = lecturersList.find(
-    (l) =>
-      (l.email && (l.email.toLowerCase().includes('dian.dharmayanti') || l.email.toLowerCase().includes('ahmad.fauzi'))) ||
-      l.name.toLowerCase().includes('dian dharmayanti') ||
-      l.name.toLowerCase().includes('ahmad fauzi')
-  );
+  const findRegisteredForLecturer = (lec: Lecturer): StoredUser | undefined =>
+    registeredUsers.find(
+      (u) =>
+        (u.lecturerId && u.lecturerId === lec.id) ||
+        (lec.email && u.email.toLowerCase() === lec.email.toLowerCase()) ||
+        (lec.code && u.email.toLowerCase() === `${lec.code.toLowerCase()}@email.ac.id`)
+    );
 
-  // Cari dosen penguji murni (yang bukan multi-peran)
+  // Cari dosen multi-peran aktual dari database pengguna + master dosen
+  let dualRoleLecturer: Lecturer | undefined = lecturersList.find((l) => {
+    const reg = findRegisteredForLecturer(l);
+    if (reg) {
+      return reg.isActive !== false && reg.roles.includes('admin') && reg.roles.includes('dosen');
+    }
+    return (
+      (l.email && l.email.toLowerCase().includes('dian.dharmayanti')) ||
+      l.name.toLowerCase().includes('dian dharmayanti')
+    );
+  });
+
+  // Cari dosen penguji murni aktual (aktif & bukan multi-role admin)
   const pureLecturer =
-    lecturersList.find(
-      (l) =>
-        l.id !== dualRoleLecturer?.id &&
-        ((l.email && l.email.toLowerCase().includes('andri.heryandi')) || l.name.toLowerCase().includes('andri heryandi'))
+    lecturersList.find((l) => {
+      if (l.id === dualRoleLecturer?.id) return false;
+      const reg = findRegisteredForLecturer(l);
+      if (reg && (reg.isActive === false || reg.roles.includes('admin'))) return false;
+      return (
+        (l.email && l.email.toLowerCase().includes('andri.heryandi')) ||
+        l.name.toLowerCase().includes('andri heryandi')
+      );
+    }) ||
+    lecturersList.find((l) => {
+      if (l.id === dualRoleLecturer?.id) return false;
+      const reg = findRegisteredForLecturer(l);
+      return !reg || (reg.isActive !== false && !reg.roles.includes('admin'));
+    });
+
+  // Cari administrator utama aktual dari database pengguna
+  const regAdmin =
+    registeredUsers.find(
+      (u) => u.roles.includes('admin') && !u.roles.includes('dosen') && u.isActive !== false
     ) ||
-    lecturersList.find((l) => l.id !== dualRoleLecturer?.id) ||
-    (lecturersList.length > 0 ? lecturersList[0] : null);
+    registeredUsers.find((u) => u.email.toLowerCase() === 'admin@simsidang.ac.id');
+
+  // Cari mahasiswa aktif aktual dari schedules + database pengguna
+  const activeStudentItem =
+    schedulesList.find((s) => {
+      const reg = registeredUsers.find(
+        (u) =>
+          u.studentNim === s.nim ||
+          u.email.toLowerCase() === `${s.nim.toLowerCase()}@mahasiswa.ac.id`
+      );
+      return s.nim === '10120262' && (!reg || reg.isActive !== false);
+    }) ||
+    schedulesList.find((s) => {
+      const reg = registeredUsers.find(
+        (u) =>
+          u.studentNim === s.nim ||
+          u.email.toLowerCase() === `${s.nim.toLowerCase()}@mahasiswa.ac.id`
+      );
+      return !reg || reg.isActive !== false;
+    });
 
   const baseAccounts: DemoAccount[] = [];
 
   // Akun 1: Dosen & Admin (Multi-Peran)
   if (dualRoleLecturer) {
-    const email = dualRoleLecturer.email || 'dian.dharmayanti@email.ac.id';
+    const reg = findRegisteredForLecturer(dualRoleLecturer);
+    const email = reg?.email || dualRoleLecturer.email || `${dualRoleLecturer.code.toLowerCase()}@email.ac.id`;
+    const password = reg?.passwordHash || 'Dosen#2025';
     baseAccounts.push({
       label: 'Dosen & Admin (Multi-Peran)',
       roleBadge: 'Dosen + Admin',
       email,
-      password: 'Dosen#2025',
-      description: `${dualRoleLecturer.name} (Bisa beralih peran bebas Dosen & Panitia Sidang)`,
-      roles: ['dosen', 'admin'],
+      password,
+      description: `${reg?.name || dualRoleLecturer.name} (Bisa beralih peran bebas Dosen & Panitia Sidang)`,
+      roles: reg?.roles || ['dosen', 'admin'],
       isAvailable: true,
     });
   } else {
@@ -100,34 +248,49 @@ export const getActiveDemoAccounts = (): DemoAccount[] => {
       roleBadge: 'Data Kosong',
       email: 'Data Dosen Multi-Peran Kosong',
       password: '',
-      description: 'Tidak ada data dosen panitia sidang terdaftar atau data telah dihapus',
+      description: 'Tidak ada data dosen panitia sidang aktif atau telah dinonaktifkan/dihapus',
       roles: ['dosen', 'admin'],
       isAvailable: false,
       unavailableReason:
-        'Akun demo Dosen Multi-Peran tidak tersedia karena data dosen terkait tidak terdaftar atau telah dihapus dari sistem.',
+        'Akun Dosen Multi-Peran tidak tersedia karena data dosen terkait tidak aktif atau telah dihapus dari sistem.',
     });
   }
 
-  // Akun 2: Administrator Utama (Admin Root Sistem)
-  baseAccounts.push({
-    label: 'Administrator Utama',
-    roleBadge: 'Admin Only',
-    email: 'admin@simsidang.ac.id',
-    password: 'Admin#2025',
-    description: 'Akses penuh jadwal matriks, kelola ruangan & slot waktu',
-    roles: ['admin'],
-    isAvailable: true,
-  });
+  // Akun 2: Administrator Utama
+  if (!regAdmin || regAdmin.isActive !== false) {
+    baseAccounts.push({
+      label: 'Administrator Utama',
+      roleBadge: 'Admin Only',
+      email: regAdmin?.email || 'admin@simsidang.ac.id',
+      password: regAdmin?.passwordHash || 'Admin#2025',
+      description: `${regAdmin?.name || 'Administrator Panitia Sidang'} — Akses penuh jadwal matriks, kelola ruangan & slot waktu`,
+      roles: ['admin'],
+      isAvailable: true,
+    });
+  } else {
+    baseAccounts.push({
+      label: 'Administrator Utama',
+      roleBadge: 'Nonaktif',
+      email: regAdmin.email,
+      password: '',
+      description: 'Akun administrator saat ini berstatus nonaktif',
+      roles: ['admin'],
+      isAvailable: false,
+      unavailableReason: 'Akun Administrator Utama berstatus nonaktif di Master Pengguna.',
+    });
+  }
 
   // Akun 3: Dosen Penguji
   if (pureLecturer) {
-    const email = pureLecturer.email || 'andri.heryandi@email.ac.id';
+    const reg = findRegisteredForLecturer(pureLecturer);
+    const email = reg?.email || pureLecturer.email || `${pureLecturer.code.toLowerCase()}@email.ac.id`;
+    const password = reg?.passwordHash || 'Dosen#2025';
     baseAccounts.push({
       label: 'Dosen Penguji',
       roleBadge: 'Dosen Only',
       email,
-      password: 'Dosen#2025',
-      description: `${pureLecturer.name} (${pureLecturer.code}) - Akses jadwal personal dan lengkap (Read-Only)`,
+      password,
+      description: `${reg?.name || pureLecturer.name} (${pureLecturer.code}) - Akses jadwal personal dan lengkap`,
       roles: ['dosen'],
       isAvailable: true,
     });
@@ -137,22 +300,29 @@ export const getActiveDemoAccounts = (): DemoAccount[] => {
       roleBadge: 'Data Kosong',
       email: 'Data Dosen Kosong',
       password: '',
-      description: 'Belum ada data dosen terdaftar atau data telah dihapus',
+      description: 'Belum ada data dosen aktif terdaftar atau data telah dihapus',
       roles: ['dosen'],
       isAvailable: false,
       unavailableReason:
-        'Data dosen tidak tersedia di sistem (telah dihapus atau belum ditambahkan). Silakan login sebagai Admin untuk mengelola data dosen.',
+        'Data dosen aktif tidak tersedia di sistem. Silakan login sebagai Admin untuk mengelola data dosen.',
     });
   }
 
   // Akun 4: Mahasiswa Peserta Sidang
-  if (firstStudent) {
+  if (activeStudentItem) {
+    const reg = registeredUsers.find(
+      (u) =>
+        u.studentNim === activeStudentItem.nim ||
+        u.email.toLowerCase() === `${activeStudentItem.nim.toLowerCase()}@mahasiswa.ac.id`
+    );
+    const email = reg?.email || `${activeStudentItem.nim}@mahasiswa.ac.id`;
+    const password = reg?.passwordHash || `Mhs#${activeStudentItem.nim}`;
     baseAccounts.push({
       label: 'Mahasiswa Peserta Sidang',
       roleBadge: 'Mahasiswa',
-      email: `${firstStudent.nim}@mahasiswa.ac.id`,
-      password: `Mhs#${firstStudent.nim}`,
-      description: `${firstStudent.name} (${firstStudent.nim})`,
+      email,
+      password,
+      description: `${reg?.name || activeStudentItem.studentName} (${activeStudentItem.nim})`,
       roles: ['mahasiswa'],
       isAvailable: true,
     });
@@ -162,16 +332,21 @@ export const getActiveDemoAccounts = (): DemoAccount[] => {
       roleBadge: 'Data Kosong',
       email: 'Data Mahasiswa Kosong',
       password: '',
-      description: 'Belum ada data mahasiswa terdaftar atau data telah dihapus',
+      description: 'Belum ada data mahasiswa aktif terdaftar atau data telah dihapus',
       roles: ['mahasiswa'],
       isAvailable: false,
       unavailableReason:
-        'Data mahasiswa tidak tersedia di sistem (telah dihapus atau belum diimpor). Silakan login sebagai Admin untuk mengimpor data.',
+        'Data mahasiswa aktif tidak tersedia di sistem. Silakan login sebagai Admin untuk mengimpor data.',
     });
   }
 
   return baseAccounts;
 };
+
+export async function getActiveDemoAccountsAsync(): Promise<DemoAccount[]> {
+  await syncDatabaseToAuthStorage();
+  return getActiveDemoAccounts();
+}
 
 export const DEMO_ACCOUNTS: DemoAccount[] = getActiveDemoAccounts();
 
@@ -277,6 +452,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Default: null (harus login terlebih dahulu)
     return null;
   });
+
+  // Sinkronkan data pengguna, dosen, dan jadwal dari IndexedDB saat mount
+  useEffect(() => {
+    syncDatabaseToAuthStorage();
+  }, []);
 
   // Simpan status otentikasi saat user berubah
   useEffect(() => {
@@ -431,20 +611,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         // Hanya kembalikan jika dosen masih aktif di master dosen
         if (matchedLecturer) {
           const lecEmail = matchedLecturer.email || registered.email;
-          const isDualAdmin =
-            lecEmail.includes('ahmad.fauzi') ||
-            matchedLecturer.name.includes('Ahmad Fauzi') ||
-            lecEmail.includes('dian.dharmayanti') ||
-            matchedLecturer.name.includes('Dian Dharmayanti') ||
-            (registered.roles && registered.roles.includes('admin'));
-          const roles: UserRole[] = isDualAdmin ? ['admin', 'dosen'] : ['dosen'];
+          const isDefaultDualAdmin =
+            lecEmail.toLowerCase().includes('dian.dharmayanti') ||
+            matchedLecturer.name.toLowerCase().includes('dian dharmayanti');
+          const defaultRoles: UserRole[] = isDefaultDualAdmin ? ['admin', 'dosen'] : ['dosen'];
+          const resolvedRoles: UserRole[] =
+            registered.roles && registered.roles.length > 0 ? registered.roles : defaultRoles;
 
           return {
             ...registered,
             name: matchedLecturer.name,
             email: registered.email || lecEmail,
-            roles: registered.roles && registered.roles.length > 0 ? registered.roles : roles,
-            activeRole: registered.activeRole || (isDualAdmin ? 'admin' : 'dosen'),
+            roles: resolvedRoles,
+            activeRole:
+              registered.activeRole && resolvedRoles.includes(registered.activeRole)
+                ? registered.activeRole
+                : resolvedRoles.includes('admin')
+                ? 'admin'
+                : 'dosen',
             department: matchedLecturer.department,
             lecturerId: matchedLecturer.id,
             passwordHash: getResolvedPassword(registered, false),
@@ -495,10 +679,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (matchedLecturer) {
       const email = matchedLecturer.email || `${matchedLecturer.code.toLowerCase()}@email.ac.id`;
       const isDualAdmin =
-        email.includes('ahmad.fauzi') ||
-        matchedLecturer.name.includes('Ahmad Fauzi') ||
-        email.includes('dian.dharmayanti') ||
-        matchedLecturer.name.includes('Dian Dharmayanti');
+        email.toLowerCase().includes('dian.dharmayanti') ||
+        matchedLecturer.name.toLowerCase().includes('dian dharmayanti');
       const roles: UserRole[] = isDualAdmin ? ['admin', 'dosen'] : ['dosen'];
 
       return {
@@ -676,6 +858,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         localStorage.setItem('sim_sidang_registered_users_v2', JSON.stringify(storedUsers));
+        syncUserToIndexedDB(updatedUser);
         return { success: true };
       } catch (err) {
         console.error('Failed to save updated password', err);
@@ -799,6 +982,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
 
         localStorage.setItem('sim_sidang_registered_users_v2', JSON.stringify(storedUsers));
+        syncUserToIndexedDB(updatedTarget);
 
         return {
           success: true,

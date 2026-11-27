@@ -712,12 +712,18 @@ export const ScheduleProvider: React.FC<{ children: React.ReactNode }> = ({ chil
       }));
     }
 
-    // Persist to indexedDB
+    // Persist to indexedDB & sinkronkan akun pengguna terkait
     const existing = lecturers.find(l => l.id === id);
     if (existing) {
-      dbRepository.saveLecturer({ ...existing, ...updates }).catch(err => {
+      const updatedLecturer = { ...existing, ...updates };
+      dbRepository.saveLecturer(updatedLecturer).catch(err => {
         console.warn('DB update lecturer error', err);
       });
+      if (updates.name || updates.email) {
+        autoProvisionLecturer(updatedLecturer).catch(err => {
+          console.warn('Auto provision sync on updateLecturer error', err);
+        });
+      }
     }
 
     addToast('success', 'Data Dosen Diperbarui', `Informasi data dosen ${updates.name || ''} berhasil disimpan.`);

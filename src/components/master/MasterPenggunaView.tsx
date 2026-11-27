@@ -78,6 +78,7 @@ export const MasterPenggunaView: React.FC = () => {
         nama: 'Administrator Utama',
         roles: ['admin'],
         role_utama: 'admin',
+        password_hash: 'Admin#2025',
         password_required: false,
         is_active: true,
         created_at: '2025-01-01T08:00:00Z',
@@ -86,13 +87,11 @@ export const MasterPenggunaView: React.FC = () => {
 
       // Populate from lecturers
       lecturers.forEach((lec) => {
-        const email = (lec.email || `${lec.code.toLowerCase()}@univ.ac.id`).toLowerCase();
-        // Check if lecturer is dual-role admin (Panitia Sidang)
+        const email = (lec.email || `${lec.code.toLowerCase()}@email.ac.id`).toLowerCase();
+        // Check if lecturer is default dual-role admin (Panitia Sidang)
         const isDualAdmin =
-          email.includes('ahmad.fauzi') ||
-          lec.name.includes('Ahmad Fauzi') ||
           email.includes('dian.dharmayanti') ||
-          lec.name.includes('Dian Dharmayanti');
+          lec.name.toLowerCase().includes('dian dharmayanti');
         const roles: ('admin' | 'dosen' | 'mahasiswa')[] = isDualAdmin ? ['admin', 'dosen'] : ['dosen'];
 
         userMap.set(email, {
@@ -165,6 +164,7 @@ export const MasterPenggunaView: React.FC = () => {
             email,
             roles: Array.isArray(u.roles) && u.roles.length > 0 ? u.roles : existing?.roles || ['mahasiswa'],
             role_utama: u.activeRole || existing?.role_utama || (Array.isArray(u.roles) ? u.roles[0] : 'mahasiswa'),
+            password_hash: u.passwordHash || existing?.password_hash,
             password_required: u.passwordRequired !== undefined ? u.passwordRequired : false,
             lecturer_id: u.lecturerId || existing?.lecturer_id,
             student_nim: u.studentNim || existing?.student_nim,
@@ -208,7 +208,9 @@ export const MasterPenggunaView: React.FC = () => {
         }
       });
 
-      setStoredUsers(Array.from(userMap.values()));
+      const mergedUsers = Array.from(userMap.values());
+      setStoredUsers(mergedUsers);
+      syncToLocalStorage(mergedUsers);
     } catch (err) {
       console.error('Error loading users:', err);
     } finally {

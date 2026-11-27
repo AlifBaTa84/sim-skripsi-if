@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth, getActiveDemoAccounts, DemoAccount } from '../../context/AuthContext';
+import { useAuth, getActiveDemoAccounts, getActiveDemoAccountsAsync, DemoAccount } from '../../context/AuthContext';
 import { generateCaptchaText } from '../../utils/authValidator';
 import { CaptchaCanvas } from './CaptchaCanvas';
 import {
@@ -34,7 +34,15 @@ export const LoginPage: React.FC = () => {
   const [demoAccounts, setDemoAccounts] = useState<DemoAccount[]>(() => getActiveDemoAccounts());
 
   useEffect(() => {
-    setDemoAccounts(getActiveDemoAccounts());
+    let mounted = true;
+    getActiveDemoAccountsAsync().then((accounts) => {
+      if (mounted) {
+        setDemoAccounts(accounts);
+      }
+    });
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   // Generate new captcha

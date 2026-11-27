@@ -35,21 +35,36 @@ function saveRegisteredUsersToStorage(users: any[]): void {
  * - Tersimpan di IndexedDB & LocalStorage
  */
 export async function autoProvisionLecturer(lecturer: Lecturer): Promise<PenggunaRecord> {
-  const email = (lecturer.email || `${lecturer.code.toLowerCase()}@univ.ac.id`).toLowerCase();
-  const isDualAdmin = email.includes('ahmad.fauzi') || lecturer.name.includes('Ahmad Fauzi');
-  const roles: ('admin' | 'dosen' | 'mahasiswa')[] = isDualAdmin ? ['admin', 'dosen'] : ['dosen'];
+  const email = (lecturer.email || `${lecturer.code.toLowerCase()}@email.ac.id`).toLowerCase();
+  const isDefaultDualAdmin = email.includes('dian.dharmayanti') || lecturer.name.toLowerCase().includes('dian dharmayanti');
+  const defaultRoles: ('admin' | 'dosen' | 'mahasiswa')[] = isDefaultDualAdmin ? ['admin', 'dosen'] : ['dosen'];
+
+  // Cek apakah user sudah ada di localStorage agar tidak menimpa password/role/status yang sudah diubah admin
+  const localList = getRegisteredUsersFromStorage();
+  const idx = localList.findIndex(
+    (u) => (u.email && u.email.toLowerCase() === email) || (u.lecturerId && u.lecturerId === lecturer.id)
+  );
+  const existingLocal = idx >= 0 ? localList[idx] : null;
+
+  const resolvedRoles: ('admin' | 'dosen' | 'mahasiswa')[] =
+    existingLocal && Array.isArray(existingLocal.roles) && existingLocal.roles.length > 0
+      ? existingLocal.roles
+      : defaultRoles;
+  const resolvedRoleUtama = existingLocal?.activeRole || (resolvedRoles.includes('admin') ? 'admin' : 'dosen');
+  const resolvedPassword = existingLocal?.passwordHash || 'Dosen#2025';
+  const resolvedIsActive = existingLocal?.isActive !== undefined ? existingLocal.isActive : true;
 
   const userRecord: PenggunaRecord = {
-    id: `usr-lec-${lecturer.id}`,
+    id: existingLocal?.id || `usr-lec-${lecturer.id}`,
     email,
     nama: lecturer.name,
-    roles,
-    role_utama: isDualAdmin ? 'admin' : 'dosen',
-    password_hash: 'Dosen#2025',
+    roles: resolvedRoles,
+    role_utama: resolvedRoleUtama,
+    password_hash: resolvedPassword,
     password_required: false,
     lecturer_id: lecturer.id,
-    is_active: true,
-    created_at: new Date().toISOString(),
+    is_active: resolvedIsActive,
+    created_at: existingLocal?.createdAt || new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
 
@@ -61,11 +76,6 @@ export async function autoProvisionLecturer(lecturer: Lecturer): Promise<Penggun
   }
 
   // 2. Simpan ke localStorage registered users
-  const localList = getRegisteredUsersFromStorage();
-  const idx = localList.findIndex(
-    (u) => (u.email && u.email.toLowerCase() === email) || (u.lecturerId && u.lecturerId === lecturer.id)
-  );
-
   const localUserObj = {
     id: userRecord.id,
     name: userRecord.nama,
@@ -73,7 +83,7 @@ export async function autoProvisionLecturer(lecturer: Lecturer): Promise<Penggun
     passwordHash: userRecord.password_hash,
     roles: userRecord.roles,
     activeRole: userRecord.role_utama,
-    isActive: true,
+    isActive: userRecord.is_active,
     lecturerId: lecturer.id,
     createdAt: userRecord.created_at,
     updatedAt: userRecord.updated_at,
