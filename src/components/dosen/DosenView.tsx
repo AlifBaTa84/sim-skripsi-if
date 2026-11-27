@@ -79,6 +79,12 @@ export const DosenView: React.FC<DosenViewProps> = ({ viewMode = 'personal' }) =
     return true;
   });
 
+  const personalSeminarSchedules = personalSchedules.filter(s => s.activityType === 'seminar');
+  const personalSidangSchedules = personalSchedules.filter(s => !s.activityType || s.activityType === 'sidang');
+
+  const allPersonalSeminarCount = allPersonalSchedules.filter(s => s.activityType === 'seminar').length;
+  const allPersonalSidangCount = allPersonalSchedules.filter(s => !s.activityType || s.activityType === 'sidang').length;
+
   // KPI Statistics for current lecturer
   const countAsP1 = currentLecturer.id ? schedules.filter(s => (s.status === 'scheduled' || s.status === 'completed') && s.examiner1Id === currentLecturer.id).length : 0;
   const countAsP2 = currentLecturer.id ? schedules.filter(s => (s.status === 'scheduled' || s.status === 'completed') && s.examiner2Id === currentLecturer.id).length : 0;
@@ -164,29 +170,31 @@ export const DosenView: React.FC<DosenViewProps> = ({ viewMode = 'personal' }) =
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
           <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
             <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-medium text-slate-500">Total Tugas Sidang</span>
+              <span className="text-xs font-medium text-slate-500">Total Tugas Personal</span>
               <Award className="w-5 h-5 text-indigo-600" />
             </div>
             <p className="text-3xl font-bold text-slate-900 font-mono">{totalAssigned}</p>
-            <span className="text-xs font-medium text-slate-500 mt-0.5 inline-block">Sidang Skripsi</span>
+            <span className="text-xs font-medium text-slate-500 mt-0.5 inline-block">
+              {allPersonalSeminarCount} Seminar • {allPersonalSidangCount} Sidang
+            </span>
           </div>
 
           <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
             <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-medium text-slate-500">Sebagai Penguji 1</span>
+              <span className="text-xs font-medium text-slate-500">Ketua / Reviewer</span>
               <span className="w-5 h-5 rounded-full bg-indigo-500 flex items-center justify-center" />
             </div>
             <p className="text-3xl font-bold text-indigo-700 font-mono">{countAsP1}</p>
-            <span className="text-xs font-medium text-slate-500 mt-0.5 inline-block">Ketua Penguji</span>
+            <span className="text-xs font-medium text-slate-500 mt-0.5 inline-block">Ketua Penguji / Reviewer</span>
           </div>
 
           <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
             <div className="flex items-center justify-between text-slate-400 mb-2">
-              <span className="text-xs font-medium text-slate-500">Sebagai Penguji 2</span>
+              <span className="text-xs font-medium text-slate-500">Penguji 2 / Pembimbing</span>
               <span className="w-5 h-5 rounded-full bg-sky-500 flex items-center justify-center" />
             </div>
             <p className="text-3xl font-bold text-sky-700 font-mono">{countAsP2}</p>
-            <span className="text-xs font-medium text-slate-500 mt-0.5 inline-block">Anggota Penguji</span>
+            <span className="text-xs font-medium text-slate-500 mt-0.5 inline-block">Pembimbing / Penguji 2</span>
           </div>
 
           <div className="bg-white rounded-2xl p-4 border border-slate-200/80 shadow-xs">
@@ -195,43 +203,243 @@ export const DosenView: React.FC<DosenViewProps> = ({ viewMode = 'personal' }) =
               <span className="w-5 h-5 rounded-full bg-teal-500 flex items-center justify-center" />
             </div>
             <p className="text-3xl font-bold text-teal-700 font-mono">{countAsP3}</p>
-            <span className="text-xs font-medium text-slate-500 mt-0.5 inline-block">Anggota Penguji</span>
+            <span className="text-xs font-medium text-slate-500 mt-0.5 inline-block">Anggota Penguji Sidang</span>
           </div>
         </div>
 
-        {/* Personal Schedule Section */}
-        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs">
-          
-          {/* ── C. Section Header with Date Filter ── */}
-          <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-50/50 rounded-t-2xl">
-            <div>
-              <h3 className="text-sm font-semibold text-slate-900">
-                Daftar Jadwal Tugas Sidang Personal
-              </h3>
-              <p className="text-xs text-slate-500 mt-0.5">
-                Menampilkan {personalSchedules.length} sidang yang ditugaskan kepada {currentLecturer.name}
-              </p>
-            </div>
+        {/* ── Filter Bar Jadwal Tugas Personal ── */}
+        <div className="bg-white rounded-2xl px-6 py-4 border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div>
+            <h3 className="text-sm font-semibold text-slate-900">
+              Filter Jadwal Tugas Personal
+            </h3>
+            <p className="text-xs text-slate-500 mt-0.5">
+              Menampilkan {personalSeminarSchedules.length} jadwal seminar dan {personalSidangSchedules.length} jadwal sidang untuk {currentLecturer.name}
+            </p>
+          </div>
+          <div className="flex items-center gap-2">
+            <CalendarDatePicker
+              value={filterDate}
+              onChange={(newDate) => setFilterDate(newDate)}
+              highlightedDates={personalScheduledDates}
+              dateCounts={personalCountsByDate}
+              allowAll={true}
+              allLabel="Semua Tanggal Pelaksanaan"
+              align="right"
+            />
+          </div>
+        </div>
 
-            {/* Date Filter via Calendar Picker */}
-            <div className="flex items-center gap-2">
-              <CalendarDatePicker
-                value={filterDate}
-                onChange={(newDate) => setFilterDate(newDate)}
-                highlightedDates={personalScheduledDates}
-                dateCounts={personalCountsByDate}
-                allowAll={true}
-                allLabel="Semua Tanggal Pelaksanaan"
-                align="right"
-              />
+        {/* ── SECTION 1: Daftar Jadwal Tugas Seminar ── */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs">
+          <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-emerald-50/50 rounded-t-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-100 text-emerald-700 flex items-center justify-center shrink-0">
+                <BookOpen className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Daftar Jadwal Tugas Seminar
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Tugas sebagai Dosen Reviewer atau Dosen Pembimbing pada Seminar Proposal/Kemajuan
+                </p>
+              </div>
             </div>
+            <span className="text-xs font-bold text-emerald-700 bg-emerald-100/80 border border-emerald-200 px-3 py-1 rounded-full self-start sm:self-auto whitespace-nowrap">
+              {personalSeminarSchedules.length} Jadwal Seminar
+            </span>
           </div>
 
-          {/* ── D. Personal Schedule Cards ── */}
           <div className="p-6">
-            {personalSchedules.length > 0 ? (
+            {personalSeminarSchedules.length > 0 ? (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                {personalSchedules.map(item => {
+                {personalSeminarSchedules.map(item => {
+                  const isCurrentReviewer = item.examiner1Id === currentLecturer.id;
+                  const isCurrentAdvisor = item.examiner2Id === currentLecturer.id;
+
+                  const roleTag = isCurrentReviewer
+                    ? { title: 'DOSEN REVIEWER SEMINAR', bg: 'bg-emerald-600 text-white' }
+                    : { title: 'DOSEN PEMBIMBING SEMINAR', bg: 'bg-sky-600 text-white' };
+
+                  const reviewer = lecturerMap.get(item.examiner1Id);
+                  const advisor = lecturerMap.get(item.examiner2Id);
+                  const isSeminarDone = item.status === 'completed' || item.seminarResult === 'lulus';
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="p-5 rounded-2xl border-2 border-emerald-200/80 bg-white hover:border-emerald-400 hover:shadow-md transition-all duration-200 flex flex-col justify-between"
+                    >
+                      <div>
+                        {/* Top Header: Role badge & time */}
+                        <div className="flex items-center justify-between gap-2 mb-3 flex-wrap">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className={`text-[10px] font-bold uppercase px-2.5 py-1 rounded-lg ${roleTag.bg}`}>
+                              {roleTag.title}
+                            </span>
+                            {item.attemptNumber && item.attemptNumber > 1 && (
+                              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 border border-amber-200">
+                                Ke-{item.attemptNumber}
+                              </span>
+                            )}
+                          </div>
+                          <span className="text-sm font-bold text-emerald-800 bg-emerald-50 border border-emerald-200/70 px-2.5 py-0.5 rounded-md font-mono">
+                            {timeSlotMap.get(item.timeSlotId || '')} WIB
+                          </span>
+                        </div>
+
+                        {/* Date & Room Details */}
+                        <div className="flex flex-wrap items-center gap-3 mb-3 pb-3 border-b border-slate-100">
+                          <div className="flex items-center gap-1.5 text-sm text-slate-600 font-medium">
+                            <Calendar className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>{formatIndonesianDate(item.date)}</span>
+                          </div>
+                          <span className="text-slate-300">•</span>
+                          <div className="flex items-center gap-1.5 text-sm text-slate-600 font-medium">
+                            <MapPin className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Ruang {roomMap.get(item.roomId || '')}</span>
+                          </div>
+                        </div>
+
+                        {/* Student Bio */}
+                        <div className="p-3 rounded-xl bg-emerald-50/40 border border-emerald-200/70 mb-3">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-700">
+                            Mahasiswa Peserta Seminar:
+                          </div>
+                          <div className="text-sm font-bold uppercase text-slate-900 mt-0.5">
+                            {item.studentName}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-xs font-mono font-semibold text-emerald-800 bg-emerald-100/80 px-1.5 py-0.5 rounded">
+                              NIM: {item.nim}
+                            </span>
+                            <span className="text-xs text-slate-500">•</span>
+                            <span className="text-xs text-slate-500">{item.studyProgram}</span>
+                          </div>
+                        </div>
+
+                        {/* Thesis Title */}
+                        <div className="mb-4">
+                          <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                            Judul Proposal / Seminar:
+                          </div>
+                          <p className="text-sm text-slate-700 leading-relaxed italic">
+                            &ldquo;{item.thesisTitle}&rdquo;
+                          </p>
+                        </div>
+                      </div>
+
+                      {/* Seminar Team: Reviewer & Pembimbing (Tanpa P3) */}
+                      <div className="pt-4 mt-4 border-t border-slate-100 space-y-1.5">
+                        <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1">
+                          Tim Dosen Seminar:
+                        </div>
+
+                        {/* Reviewer */}
+                        <div className={`p-1.5 rounded-lg flex items-start gap-2 ${
+                          isCurrentReviewer ? 'bg-emerald-50/90 border border-emerald-200 text-emerald-950 font-bold' : 'text-slate-700'
+                        }`}>
+                          <span className="px-1.5 h-5 rounded bg-emerald-100 text-emerald-800 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5 font-mono">
+                            REV
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold text-slate-900 leading-tight break-words">
+                              {reviewer?.name || item.reviewerName || '-'}{' '}
+                              {isCurrentReviewer && <span className="text-emerald-600 font-bold ml-1">(Anda)</span>}
+                            </div>
+                            <div className="text-xs text-slate-500">Dosen Reviewer</div>
+                          </div>
+                        </div>
+
+                        {/* Pembimbing */}
+                        <div className={`p-1.5 rounded-lg flex items-start gap-2 ${
+                          isCurrentAdvisor ? 'bg-sky-50/80 border border-sky-200 text-sky-950 font-bold' : 'text-slate-700'
+                        }`}>
+                          <span className="px-1.5 h-5 rounded bg-sky-100 text-sky-800 font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5 font-mono">
+                            PBB
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <div className="text-sm font-semibold text-slate-900 leading-tight break-words">
+                              {advisor?.name || item.advisorName || '-'}{' '}
+                              {isCurrentAdvisor && <span className="text-sky-600 font-bold ml-1">(Anda)</span>}
+                            </div>
+                            <div className="text-xs text-slate-500">Dosen Pembimbing</div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Seminar Status */}
+                      <div className="pt-3.5 mt-3 border-t border-slate-100 flex items-center justify-between gap-3">
+                        {isSeminarDone ? (
+                          <div className="w-full flex items-center justify-between bg-emerald-50/80 border border-emerald-200/80 rounded-xl px-3 py-2">
+                            <span className="flex items-center gap-1.5 text-xs font-bold text-emerald-800">
+                              <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+                              <span>Seminar Selesai (Lulus)</span>
+                            </span>
+                            {item.seminarScore !== undefined && item.seminarScore !== '' && (
+                              <span className="text-xs font-bold font-mono text-emerald-700 bg-white px-2 py-0.5 rounded-md border border-emerald-200">
+                                Nilai: {item.seminarScore}
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <div className="w-full flex items-center justify-between text-xs text-slate-500 px-1">
+                            <span className="flex items-center gap-1.5 text-emerald-700 font-medium text-[11px]">
+                              <Clock className="w-3.5 h-3.5 text-emerald-500" />
+                              <span>Status: Seminar Terjadwal</span>
+                            </span>
+                            <span className="text-[11px] text-slate-400 italic">
+                              Penilaian dicatat oleh Admin / Panitia
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="text-center py-12">
+                <BookOpen className="w-10 h-10 text-slate-300 mx-auto mb-2" />
+                <p className="text-sm font-bold text-slate-700">Tidak Ada Jadwal Tugas Seminar</p>
+                <p className="text-xs text-slate-400 mt-1 max-w-sm mx-auto">
+                  Dosen ini belum memiliki agenda seminar yang dijadwalkan pada rentang filter tanggal yang dipilih.
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* ── SECTION 2: Daftar Jadwal Tugas Sidang Skripsi ── */}
+        <div className="bg-white rounded-2xl border border-slate-200/80 shadow-xs">
+          
+          {/* ── C. Section Header ── */}
+          <div className="px-6 py-4 border-b border-slate-100 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-indigo-50/40 rounded-t-2xl">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-indigo-100 text-indigo-700 flex items-center justify-center shrink-0">
+                <GraduationCap className="w-4 h-4" />
+              </div>
+              <div>
+                <h3 className="text-sm font-semibold text-slate-900">
+                  Daftar Jadwal Tugas Sidang Skripsi
+                </h3>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Tugas sebagai Ketua Penguji (P1), Penguji 2 / Pembimbing (P2), atau Penguji 3 (P3)
+                </p>
+              </div>
+            </div>
+
+            <span className="text-xs font-bold text-indigo-700 bg-indigo-100/80 border border-indigo-200 px-3 py-1 rounded-full self-start sm:self-auto whitespace-nowrap">
+              {personalSidangSchedules.length} Jadwal Sidang
+            </span>
+          </div>
+
+          {/* ── D. Personal Sidang Schedule Cards ── */}
+          <div className="p-6">
+            {personalSidangSchedules.length > 0 ? (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {personalSidangSchedules.map(item => {
                   const isCurrentP1 = item.examiner1Id === currentLecturer.id;
                   const isCurrentP2 = item.examiner2Id === currentLecturer.id;
                   const isCurrentP3 = item.examiner3Id === currentLecturer.id;
